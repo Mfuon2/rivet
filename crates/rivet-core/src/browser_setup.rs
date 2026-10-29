@@ -203,7 +203,7 @@ pub fn manifest_path(platform: Platform, home: &Path, data: &Path, browser: Brow
     folder.join(format!("{HOST}.json"))
 }
 /// Idempotent publication: matching files are not rewritten; interrupted writes never publish partial JSON.
-fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<bool> {
+pub(crate) fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<bool> {
     if std::fs::read(path).ok().as_deref() == Some(bytes) {
         return Ok(false);
     }
@@ -309,7 +309,19 @@ pub fn register(
     }
     Ok(path)
 }
-const ASSETS: [(&str, &[u8]); 11] = [
+const ASSETS: [(&str, &[u8]); 14] = [
+    (
+        "setup.html",
+        include_bytes!("../../../browser/shared/setup.html"),
+    ),
+    (
+        "setup.js",
+        include_bytes!("../../../browser/shared/setup.js"),
+    ),
+    (
+        "setup.css",
+        include_bytes!("../../../browser/shared/setup.css"),
+    ),
     (
         "media-widget.js",
         include_bytes!("../../../browser/shared/media-widget.js"),

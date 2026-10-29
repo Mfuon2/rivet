@@ -1,3 +1,4 @@
+pub mod browser_install;
 pub mod browser_setup;
 pub mod download;
 pub mod native;

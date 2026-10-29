@@ -9,7 +9,8 @@
     "activeTab",
     "storage",
     "webRequest",
-    "scripting"
+    "scripting",
+    "alarms"
   ],
   "optional_permissions": [
     "http://*/*",

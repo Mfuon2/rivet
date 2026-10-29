@@ -145,6 +145,12 @@ fn prepared_packages_use_fixed_ids_and_connection_records_are_bounded() {
     assert!(chromium_manifest["key"].as_str().unwrap().len() > 100);
     assert!(firefox.join("background.js").is_file());
     for folder in [&chromium, &firefox] {
+        for name in ["setup.html", "setup.js", "setup.css"] {
+            assert!(
+                folder.join(name).is_file(),
+                "Automatic connection page missing from the prepared extension"
+            );
+        }
         assert_eq!(
             std::fs::read(folder.join("media-widget.js")).unwrap(),
             include_bytes!("../../../browser/shared/media-widget.js")

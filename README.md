@@ -53,9 +53,11 @@ Automatic queue processing is off at startup. **Stop** pauses selected active tr
 
 On startup, Rivet detects a supported default browser, prepares the extension files, and registers its native helper for the current user. Open **Browsers** in the toolbar to check or repeat setup.
 
-The current extension packages are development builds. Chrome/Edge/Chromium require **Developer mode → Load unpacked**. Firefox uses **Load Temporary Add-on**, which must be repeated after Firefox restarts. Store distribution is pending; Rivet does not bypass browser approval.
+Setup checks whether the extension is present, prepares the native connection, opens an available store installation page, and confirms the connection automatically after browser approval. You can continue or restart Rivet once setup completes.
 
-After loading the extension, choose **Check connection** in its popup. Right-click a download link and select **Send link to Rivet**. Captured links appear in the desktop queue.
+While store approval is pending, setup offers the matching GitHub ZIP, the already-prepared extension folder and the browser installer page. Chrome/Edge/Chromium use **Developer mode → Load unpacked**; Firefox uses **Load Temporary Add-on**, which must be repeated after Firefox restarts. Rivet does not bypass browser approval.
+
+The extension connects automatically after installation; its **Finish setup** page and **Check connection** button are available for troubleshooting. Right-click a download link and select **Send link to Rivet**. Captured links appear in the desktop queue.
 
 See [browser setup](docs/BROWSER.md) for detailed instructions and troubleshooting.
 

@@ -1,6 +1,7 @@
 "use strict";
 const api = globalThis.browser || globalThis.chrome;
 const status = document.getElementById("status");
+document.getElementById("setup").addEventListener("click", () => api.tabs.create({url: api.runtime.getURL("setup.html")}));
 let tab;
 
 async function send(url) {

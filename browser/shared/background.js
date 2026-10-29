@@ -35,6 +35,12 @@ async function capture(url) {
 function announceConnection() {
   api.runtime.sendNativeMessage(HOST, {type: "ping"}).catch(() => {});
 }
+function startConnectionChecks() {
+  announceConnection();
+  // A lightweight local heartbeat lets an open desktop setup detect installation,
+  // re-enabling and helper repairs without asking the user to press Check connection.
+  Promise.resolve(api.alarms.create("rivet-connection", {periodInMinutes: 1})).catch(() => {});
+}
 // Registered only for explicitly enabled origins with current host permission.
 function updateWidgetScripts() {
   widgetUpdate = widgetUpdate.catch(() => {}).then(async () => {
@@ -66,9 +72,11 @@ async function widgetAllowed(sender) {
   const origin = new URL(sender.url).origin;
   return enabledSites.has(origin) && await api.permissions.contains({origins: [`${origin}/*`]});
 }
-api.runtime.onStartup.addListener(announceConnection);
-api.runtime.onInstalled.addListener(() => {
-  announceConnection();
+api.runtime.onStartup.addListener(startConnectionChecks);
+api.alarms.onAlarm.addListener(alarm => { if (alarm.name === "rivet-connection") announceConnection(); });
+api.runtime.onInstalled.addListener(details => {
+  startConnectionChecks();
+  if (details.reason === "install") api.tabs.create({url: api.runtime.getURL("setup.html")}).catch(() => {});
   api.contextMenus.removeAll().then(() => {
     api.contextMenus.create({id: "rivet-link", title: "Send link to Rivet", contexts: ["link"]});
     api.contextMenus.create({id: "rivet-media", title: "Send media file to Rivet", contexts: ["video", "audio"]});
@@ -151,4 +159,7 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 api.permissions.onRemoved.addListener(() => { updateWidgetScripts().catch(() => {}); });
+// Restore the connection alarm if the browser discarded it while disabled or
+// after a restart. This also connects immediately when no alarm exists yet.
+Promise.resolve(api.alarms.get("rivet-connection")).then(alarm => { if (!alarm) startConnectionChecks(); }).catch(() => {});
 sitesReady.then(updateWidgetScripts).catch(() => {});

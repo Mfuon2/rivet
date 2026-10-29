@@ -26,6 +26,7 @@ The desktop app and its registered native helper are required. Captured links en
 - activeTab: identify the current tab when the popup is used.
 - storage: remember the origins the user enabled for media discovery.
 - webRequest: observe response URLs/content types for optional direct-media discovery; gated by explicit site permission.
+- alarms: schedule a once-per-minute local native-helper connection check so desktop setup can detect installation and reconnection automatically. No page URL is sent and no download is started.
 - scripting: inject the packaged media-widget content script only on explicitly enabled sites with current host permission, so users can choose a media link beside the player.
 - Optional HTTP/HTTPS origins: granted for a site only when the user enables discovery; not pre-granted for all sites.
 

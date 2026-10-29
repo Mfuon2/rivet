@@ -63,6 +63,25 @@ case "ocr":
         return ["text":text, "x":result.boundingBox.midX, "y":1-result.boundingBox.midY]
     }
     print(String(data: try JSONSerialization.data(withJSONObject: rows), encoding: .utf8)!)
+case "labels":
+    let app = AXUIElementCreateApplication(Int32(args[2])!)
+    var labels = Set<String>()
+    func collect(_ node: AXUIElement, _ depth: Int = 0) {
+        if depth > 40 { return }
+        for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(node, key as CFString, &value) == .success, let text = value as? String { labels.insert(text) }
+        }
+        var value: CFTypeRef?
+        if AXUIElementCopyAttributeValue(node, kAXChildrenAttribute as CFString, &value) == .success, let children = value as? [AXUIElement] {
+            for child in children { collect(child, depth + 1) }
+        }
+    }
+    var value: CFTypeRef?
+    if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success, let windows = value as? [AXUIElement] {
+        for window in windows { collect(window) }
+    }
+    print(String(data: try JSONSerialization.data(withJSONObject: Array(labels).map { ["text": $0] }), encoding: .utf8)!)
 case "press":
     let pid = Int32(args[2])!
     NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
@@ -75,7 +94,7 @@ case "press":
             if AXUIElementCopyAttributeValue(node, key as CFString, &value) == .success, let text = value as? String, text == label {
                 var role: CFTypeRef?
                 AXUIElementCopyAttributeValue(node, kAXRoleAttribute as CFString, &role)
-                if let role = role as? String, [kAXButtonRole, kAXCheckBoxRole, kAXRadioButtonRole].contains(role) { return node }
+                if let role = role as? String, [kAXButtonRole, kAXCheckBoxRole, kAXRadioButtonRole, kAXDisclosureTriangleRole].contains(role) { return node }
             }
         }
         var value: CFTypeRef?
@@ -85,9 +104,14 @@ case "press":
         return nil
     }
     for _ in 0..<30 {
-        if let button = find(app, args[3]) {
-            guard AXUIElementPerformAction(button, kAXPressAction as CFString) == .success else { exit(3) }
-            exit(0)
+        var value: CFTypeRef?
+        if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success, let windows = value as? [AXUIElement] {
+            for window in windows {
+                if let button = find(window, args[3]) {
+                    guard AXUIElementPerformAction(button, kAXPressAction as CFString) == .success else { exit(3) }
+                    exit(0)
+                }
+            }
         }
         Thread.sleep(forTimeInterval: 0.2)
     }
@@ -107,8 +131,10 @@ def main():
         folder = Path(temporary)
         swift = folder / "buttons.swift"
         swift.write_text(SWIFT)
+        helper = folder / "buttons"
+        subprocess.run(["swiftc", str(swift), "-o", str(helper)], check=True, capture_output=True)
         def native(*args):
-            return subprocess.run(["swift", str(swift), *map(str, args)], check=True, capture_output=True, text=True, timeout=30).stdout
+            return subprocess.run([str(helper), *map(str, args)], check=True, capture_output=True, text=True, timeout=30).stdout
         backup = folder / "clipboard.plist"
         native("backup", backup)
         env = dict(os.environ, RIVET_DATABASE=str(folder / "queue.sqlite3"), RIVET_SETUP_ROOT=str(folder / "home"))
@@ -126,21 +152,23 @@ def main():
             if args.screenshots:
                 subprocess.run(["screencapture", "-x", "-l", str(window["id"]), str(ROOT / "docs/startup-preview.png")], check=True, capture_output=True)
             def text():
-                screenshot = folder / "window.png"
-                subprocess.run(["screencapture", "-x", "-o", "-l", str(window["id"]), str(screenshot)], check=True, capture_output=True, timeout=10)
-                return json.loads(native("ocr", screenshot))
+                return json.loads(native("labels", process.pid))
             def click(label):
                 native("press", process.pid, label)
                 time.sleep(0.4)
             subprocess.run(["pbcopy"], input="rivet-native-test-sentinel", text=True, check=True)
+            click("Development setup")
             click("Copy browser setup address")
             address = subprocess.check_output(["pbpaste"], text=True)
             assert address in ("chrome://extensions", "edge://extensions", "about:debugging#/runtime/this-firefox"), "System clipboard did not receive the browser address"
             click("Copy extension folder")
             path = subprocess.check_output(["pbpaste"], text=True)
             assert Path(path).is_dir() and Path(path).resolve().is_relative_to(folder.resolve()), f"System clipboard did not receive the prepared extension path (still address: {path == address})"
+            click("Connection details")
             click("Check again")
             time.sleep(1)
+            if not any(row["text"] == "Copy browser setup address" for row in text()):
+                click("Development setup")
             assert any(row["text"] == "Copy browser setup address" for row in text()), "Setup did not return after rechecking"
             click("Continue to Rivet")
             assert any("Categories" in row["text"] for row in text()), "Continue did not open the download manager"

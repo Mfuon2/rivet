@@ -15,7 +15,7 @@ Implementation status describes the current source. It does not imply production
 | Transfer popup | Live byte ranges, segment states/progress, pause/resume and retained session snapshots |
 | CLI | Downloads, queue management, proxy options and manifest generation |
 | Chromium/Firefox handoff | Extension sources, packages and native helper implemented; store distribution pending |
-| Default-browser setup | Detection, per-user helper registration and embedded package preparation |
+| Default-browser setup | Read-only extension discovery, helper repair, approved-store requests, automatic handshake and GitHub ZIP fallback |
 | Media URL discovery | Opt-in per-site discovery; detections held in worker memory |
 | In-page media widget | Standard HTML video/audio on enabled sites; explicit direct-file handoff, no protected-media bypass |
 | Authenticated browser downloads | Planned; cookies/passwords are not forwarded |

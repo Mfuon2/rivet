@@ -1,6 +1,8 @@
 //! Read-only extension discovery and browser-approved store installation requests.
 use crate::browser_setup::{self, Browser, Distribution, Platform};
-use anyhow::{Context, Result, ensure};
+#[cfg(any(target_os = "macos", windows))]
+use anyhow::Context;
+use anyhow::{Result, ensure};
 use serde_json::Value;
 #[cfg(windows)]
 use std::process::Stdio;

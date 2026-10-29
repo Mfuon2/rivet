@@ -152,6 +152,7 @@ enum Action {
     StopQueue,
     Properties,
     Progress,
+    About,
     Browser,
     SelectAll,
 }
@@ -187,6 +188,7 @@ struct App {
     show_options: bool,
     show_scheduler: bool,
     show_browser: bool,
+    show_about: bool,
     browser_choice: usize,
     properties: Option<String>,
     transfer: Option<transfer::TransferView>,
@@ -288,6 +290,7 @@ impl App {
             show_options: false,
             show_scheduler: false,
             show_browser: false,
+            show_about: false,
             browser_choice: 0,
             properties: None,
             transfer: None,
@@ -464,6 +467,7 @@ impl App {
                 }
             }
             Action::Browser => self.show_browser = true,
+            Action::About => self.show_about = true,
             Action::SelectAll => {
                 self.selected = self.visible().iter().map(|j| j.id.clone()).collect()
             }

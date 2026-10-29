@@ -1,44 +1,63 @@
-# Free release signing
+# Release and publication pipeline
 
-No paid account or certificate is required for this workflow. Minisign signs release checksums with an encrypted private key held outside the repository. It does not replace browser-store signing, Windows Authenticode, or Apple Developer ID/notarization.
+Merging into `main` triggers [Release and publish](../.github/workflows/release.yml). A direct push to `main` does the same. No paid signing account is required for the signed-checksum workflow.
 
-## First-time key setup (maintainer's own terminal)
-
-Install Minisign (macOS: `brew install minisign`; Ubuntu: `sudo apt install minisign`). Then:
-
-```sh
-python3 scripts/release.py keygen
+```text
+main update → allocate version → test/build Windows + macOS + Linux
+            → inspect packages → sign checksums → publish → verify downloads
 ```
 
-A production public key is now published in `release/minisign.pub`; do not regenerate or replace that identity. The original maintainer's encrypted key stays outside Git. For a new independent fork, enter a strong password in your terminal. The script creates the encrypted private key at `~/.config/rivet-signing/minisign.key` and the public key at `release/minisign.pub`. Commit/publish only the public key and establish its fingerprint through trusted channels. Keep an offline backup of the private key and password separately. No private key or password is sent to GitHub by this workflow. The maintainer may instead authorize `python3 scripts/release.py keygen --keychain` on macOS. This generates a random password, stores it in the current user's Keychain under `org.rivet.downloads.minisign`, and encrypts the private key without putting the password in process arguments, logs or GitHub. Sign with `python3 scripts/release.py sign DIRECTORY --keychain`. Keychain Access can be used by the maintainer to manage/back up the credential. Never upload it or the private key.
+## Automatic versions
 
-## Build and package
+The workflow allocates the next unused numeric patch version in the source version's major/minor series. For example, after `v0.1.0`, the next successful main update produces `v0.1.1`. It stamps the workspace version, the three workspace entries in `Cargo.lock`, and both browser manifests inside the runner checkout. It does not commit version changes back to `main` or create a recursive release loop.
 
-On each target operating system:
+To reproduce a release, check out its source tag, run `python3 scripts/publish.py stamp VERSION`, then use the committed lockfile to build. The immutable release tag identifies the source commit; the release notes record the generated version. A rerun for a commit already published is skipped. Published assets are not overwritten by the automatic pipeline. An incomplete draft for the same source commit can be retried.
+
+Main release runs are serialized. If main changes rapidly, GitHub concurrency keeps the active run and newest pending run; intermediate pending runs may be superseded. The latest main state is eventually released without version-allocation races.
+
+## Build and verification
+
+Each platform runs Python packaging/signature tests, Rust formatting/lints/tests, browser tests, an optimized build and end-to-end checks against the actual release binaries. Native packaging produces:
+
+- Windows x64: an Inno Setup installer and ZIP. CI exercises silent installation, the installed CLI/helper, and uninstallation.
+- macOS: a PKG and app archive for the runner architecture; installer payload and icons are checked.
+- Linux x64: a DEB and tarball built on Ubuntu 24.04; the DEB is extracted and its CLI, launcher and icon checked.
+- Chromium and Firefox development ZIPs plus a separate Chrome Web Store upload ZIP.
+
+All platform jobs must succeed before publication. Collection requires every supported platform and rejects missing or conflicting packages. Browser ZIPs use normalized metadata so duplicate cross-platform outputs have identical bytes.
+
+## Signing and publication
+
+The publish job uses the GitHub `release` environment, restricted to `main`. Its environment secrets are `MINISIGN_SECRET_KEY` (the encrypted private key) and `MINISIGN_PASSWORD`. They are never committed, printed or uploaded as build artifacts. The private key is materialized only in a temporary directory for signing and removed afterward. Secrets are available only to the signing step; build and pull-request jobs do not receive them.
+
+The original encrypted key and Keychain-protected password remain on the maintainer's Mac as a local backup. `release/minisign.pub` is the public verification key; do not replace that identity casually. Only trusted changes should be merged into main because the release workflow executes main's code.
+
+After signing `SHA256SUMS`, the job verifies the signature against the committed public key, creates a draft GitHub release, uploads installers/archives/extensions and authentication files, downloads and verifies them, publishes the release, and verifies the public downloads again. The GitHub token has write access only in the publication job. Actions are pinned to commit IDs.
+
+Installable files are published as **GitHub Release assets**. The GitHub Packages tab is a separate package/container registry and is not required for these downloads. The workflow also records the release URL in the Actions summary and `release` deployment environment.
+
+Releases remain marked as previews while the project is under development. Minisign authentication is not Windows Authenticode or Apple Developer ID/notarization. Browser-store upload/review is separate; the pipeline produces the upload ZIP but does not claim store approval or bypass browser consent.
+
+## Manual operation and recovery
+
+Use Actions → **Release and publish** → **Run workflow** on main to retry. No manual ZIP creation, version edit, signing or release upload is needed for ordinary merges. A missing signing secret or failed check stops the pipeline rather than publishing an unsigned authenticated-release claim.
+
+For a local build:
 
 ```sh
 cargo build --release --workspace --locked
 python3 scripts/release.py package --installer
 ```
 
-Artifacts land in `dist/releases/0.1.0/` for the current version. macOS builds a `.app` archive and unsigned `.pkg` (ad-hoc app signature only); Windows builds a ZIP and unsigned Inno Setup EXE (install Inno Setup 6 first); Linux builds a tarball and DEB (requires `dpkg-deb`). Linux compatibility depends on the build machine's glibc/runtime; the CI package targets Ubuntu 24.04 rather than claiming every Linux distribution. Only architectures actually built and tested are supported.
-
-Do not install a test package over a development copy without accounting for native-helper paths. The app registers the installed sibling helper at first launch. Windows includes an uninstaller; macOS/Linux removal follows their package management and per-user browser-registration cleanup remains future work. Queue/history/downloads are preserved.
-
-## Sign locally, then upload
-
-Collect the packages from the same source revision/version into one directory. Platform publisher signing, if used later, must happen before checksum generation.
+For local checksum signing with the existing Mac Keychain credential:
 
 ```sh
 python3 scripts/release.py checksums dist/releases/0.1.0
-python3 scripts/release.py sign dist/releases/0.1.0
-python3 scripts/release.py verify dist/releases/0.1.0
+python3 scripts/release.py sign dist/releases/0.1.0 --keychain
 ```
 
-Signing prompts for the private-key password. Publish the packages, `SHA256SUMS`, `SHA256SUMS.minisig`, public key and release notes only after verification. The public key should also live in the established source repository; never rely solely on a key attached beside a download. See VERIFYING.md.
+Local packaging requires Inno Setup 6 on Windows, Apple's `pkgbuild` on macOS or `dpkg-deb` on Debian/Ubuntu. Users can verify downloads using [VERIFYING.md](VERIFYING.md).
 
-The manual GitHub Actions packaging workflow uploads unsigned build artifacts only; it has no signing secrets and does not automatically publish a release. A missing production key never silently falls back to an unsigned authenticated-release claim.
+## Other publishing services
 
-## Public release readiness
-
-Native packaging scripts exist but need clean-machine install/upgrade/uninstall tests on every target. Store approval, a production signing identity, reproducibility validation, third-party dependency/license review, OS-specific signing and notarization are not implied by successful local builds. SignPath acceptance also requires a public documented project and an existing release; see docs/publishing/SIGNPATH-DRAFT.md.
+Apple notarization, Windows publisher certificates/SignPath and browser-store publication require their separate enrollment or approval processes. Their credentials are not configured in this pipeline. Installer inspection is automated, but comprehensive clean-machine desktop/browser interaction coverage and independent security review remain separate work.

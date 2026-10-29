@@ -142,7 +142,7 @@ def keygen(key_dir, use_keychain=False):
     print(f"Public key: {PUBLIC_KEY}\nEncrypted private key: {private}\nBack up the private key and password separately. Commit only the public key.")
 
 
-def sign(directory, key, pubkey, use_keychain=False):
+def sign(directory, key, pubkey, use_keychain=False, password_env=None):
     directory, key, pubkey = directory.resolve(), key.expanduser().resolve(), pubkey.resolve()
     if key.is_relative_to(ROOT):
         raise ValueError("Keep private signing keys outside the repository")
@@ -151,8 +151,10 @@ def sign(directory, key, pubkey, use_keychain=False):
     verify_hashes(directory)
     manifest = directory / CHECKSUMS
     command = [minisign(), "-S", "-s", key, "-m", manifest, "-t", f"Rivet {version()} release checksums"]
-    if use_keychain:
-        password = keychain_password()
+    if use_keychain or password_env:
+        password = keychain_password() if use_keychain else os.environ.get(password_env)
+        if not password:
+            raise ValueError("Signing password is missing")
         result = subprocess.run(command, input=password + "\n", capture_output=True, text=True)
         if result.returncode != 0:
             raise ValueError("Minisign signing failed; the encrypted private key was not exposed")
@@ -229,7 +231,7 @@ def package(output, installer=False):
     for name in ("rivet", "rivet-native-host", "rivet-desktop"):
         if not (binaries / (name + suffix)).is_file():
             raise ValueError("Build all release executables first: cargo build --release --workspace --locked")
-    run([sys.executable, ROOT / "scripts/package_browser.py"])
+    run([sys.executable, ROOT / "scripts/package_browser.py", "--chrome-store"])
     with tempfile.TemporaryDirectory(prefix="rivet-package-") as temporary:
         stage = Path(temporary)
         bundle = stage / base
@@ -268,6 +270,7 @@ def package(output, installer=False):
                     linux_deb(stage, output, base, app_version, machine)
     for browser in ("chromium", "firefox"):
         shutil.copy2(ROOT / "dist" / f"rivet-{browser}.zip", output / f"rivet-{app_version}-extension-{browser}.zip")
+    shutil.copy2(ROOT / "dist/rivet-chrome-store.zip", output / f"rivet-{app_version}-chrome-store.zip")
     checksums(output)
     print(f"Packages and checksums: {output}\nNot authenticated until signed; no platform publisher signing was performed.")
 
@@ -286,7 +289,9 @@ def main():
     p = commands.add_parser("sign")
     p.add_argument("directory", type=Path)
     p.add_argument("--key", type=Path, default=Path.home() / ".config/rivet-signing/minisign.key")
-    p.add_argument("--keychain", action="store_true", help="Use the password protected by macOS Keychain")
+    passwords = p.add_mutually_exclusive_group()
+    passwords.add_argument("--keychain", action="store_true", help="Use the password protected by macOS Keychain")
+    passwords.add_argument("--password-env", help="Read a signing password from this environment variable without logging it")
     p.add_argument("--pubkey", type=Path, default=PUBLIC_KEY)
     p = commands.add_parser("verify")
     p.add_argument("directory", type=Path)
@@ -296,7 +301,7 @@ def main():
         if args.command == "package": package(args.output, args.installer)
         elif args.command == "checksums": checksums(args.directory)
         elif args.command == "keygen": keygen(args.key_dir, args.keychain)
-        elif args.command == "sign": sign(args.directory, args.key, args.pubkey, args.keychain)
+        elif args.command == "sign": sign(args.directory, args.key, args.pubkey, args.keychain, args.password_env)
         elif args.command == "verify": verify(args.directory, args.pubkey)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Release operation failed: {error}\n")

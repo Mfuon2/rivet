@@ -85,7 +85,11 @@ impl App {
                             ui.close();
                         }
                         ui.add(widgets::logo(64.));
-                        ui.label("Rivet 0.1 · MIT open source");
+                        ui.label(concat!(
+                            "Rivet ",
+                            env!("CARGO_PKG_VERSION"),
+                            " · MIT open source"
+                        ));
                         ui.label("No activation. No telemetry.");
                         ui.collapsing("Lucide icon license", |ui| {
                             egui::ScrollArea::vertical()

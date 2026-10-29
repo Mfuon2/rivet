@@ -9,7 +9,7 @@ license.workspace = true
 anyhow.workspace = true
 directories.workspace = true
 eframe.workspace = true
-egui_extras = { version = "0.37", default-features = false, features = ["svg"] }
+egui_extras = { version = "0.37", default-features = false, features = ["svg", "image"] }
 serde.workspace = true
 serde_json.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

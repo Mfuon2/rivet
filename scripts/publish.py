@@ -84,7 +84,7 @@ def stamp(value, root=release.ROOT):
             changed = True
     if not changed:
         raise ValueError("Workspace package version not found")
-    cargo.write_text("".join(lines))
+    cargo.write_text("".join(lines), encoding="utf-8", newline="\n")
     lock = root / "Cargo.lock"
     blocks = lock.read_text().split("[[package]]")
     found = set()
@@ -95,12 +95,13 @@ def stamp(value, root=release.ROOT):
             found.add(name[1])
     if not {"rivet-cli", "rivet-core", "rivet-desktop"}.issubset(found):
         raise ValueError("Workspace packages not found in lockfile")
-    lock.write_text("[[package]]".join(blocks))
+    lock.write_text("[[package]]".join(blocks), encoding="utf-8", newline="\n")
     for browser in ("chromium", "firefox"):
         path = root / "browser" / browser / "manifest.json"
         manifest = json.loads(path.read_text())
         manifest["version"] = value
-        path.write_text(json.dumps(manifest, indent=2) + "\n")
+        # Text-mode defaults translate LF to CRLF on Windows, changing ZIP hashes.
+        path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     print("Stamped application, lockfile and browser versions:", value)
 
 

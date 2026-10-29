@@ -39,6 +39,8 @@ class PublishTests(unittest.TestCase):
             self.assertIn('version = "9.8.7"', (root / "Cargo.lock").read_text())
             self.assertEqual((root / "Cargo.lock").read_text().count('version = "0.1.5"'), 3)
             self.assertEqual(json.loads((root / "browser/chromium/manifest.json").read_text())["key"], "identity-stays-the-same")
+            for name in ("Cargo.toml", "Cargo.lock", "browser/chromium/manifest.json", "browser/firefox/manifest.json"):
+                self.assertNotIn(b"\r\n", (root / name).read_bytes(), "Release stamping must produce identical bytes on Windows and Unix")
 
     def test_existing_published_commit_is_skipped_on_rerun(self):
         commit = "a" * 40

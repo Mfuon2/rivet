@@ -1,0 +1,128 @@
+name: Release and publish
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rivet-release-main
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      already: ${{ steps.plan.outputs.already }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Allocate release version
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: python scripts/publish.py plan --repo "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT"
+  build:
+    name: Test and package (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.already != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Linux prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y minisign cmake libxkbcommon-dev libwayland-dev libx11-dev libxi-dev libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev
+      - name: Windows installer tool
+        if: runner.os == 'Windows'
+        run: choco install innosetup --yes --no-progress
+      - name: Stamp release version
+        run: python scripts/publish.py stamp "${{ needs.plan.outputs.version }}"
+      - name: Python packaging and signature tests
+        run: python -m unittest discover -s scripts/tests -v
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Rust lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Rust tests
+        run: cargo test --workspace --locked
+      - name: Browser tests
+        run: node --test browser/tests/background.test.cjs
+      - name: Build release executables
+        run: cargo build --release --workspace --locked
+      - name: Test actual release binaries
+        run: python scripts/smoke.py --binary-dir target/release
+      - name: Package installers and extensions
+        run: python scripts/release.py package --installer
+      - name: Inspect packages and exercise Windows installation
+        run: python scripts/publish.py inspect "dist/releases/${{ needs.plan.outputs.version }}" --install
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ runner.os }}-${{ runner.arch }}
+          path: dist/releases/${{ needs.plan.outputs.version }}/
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    name: Sign, publish and verify downloads
+    needs: [plan, build]
+    if: needs.plan.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    environment:
+      name: release
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y minisign
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: dist/inputs
+      - name: Stamp release metadata
+        run: python scripts/publish.py stamp "${{ needs.plan.outputs.version }}"
+      - name: Require complete cross-platform packages
+        run: python scripts/publish.py collect dist/inputs dist/publish --version "${{ needs.plan.outputs.version }}"
+      - name: Sign checksums with protected key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: python scripts/publish.py sign dist/publish
+      - name: Publish GitHub release and verify uploaded files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.version }}
+        run: python scripts/publish.py publish dist/publish --repo "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT" --version "$RELEASE_VERSION"

@@ -6,6 +6,8 @@
 
 Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause and resume supported transfers, and send download links from your browser. It includes a desktop application, command-line tools, and Chromium/Firefox extensions.
 
+[![Release and publish](https://github.com/Mfuon2/rivet/actions/workflows/release.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/release.yml)
+
 [Downloads](https://github.com/Mfuon2/rivet/releases) · [Browser setup](docs/BROWSER.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md)
 
 ![Desktop preview](docs/desktop-preview.png)
@@ -103,6 +105,10 @@ Use `--help` for available commands. `--database` selects a queue database; `--p
 - Automated builds/tests do not replace clean-machine installation and real-browser testing.
 
 See [capabilities](docs/CAPABILITIES.md) and the [roadmap](docs/ROADMAP.md) for implementation status.
+
+## Automatic releases
+
+Updates merged into `main` automatically run the checks, build Windows/macOS/Linux packages, sign release checksums, publish a versioned GitHub release, and verify the uploaded downloads. Each release includes native installers, archives and browser ZIPs. See the [release guide](release/README.md) for versioning and recovery details.
 
 ## Development
 

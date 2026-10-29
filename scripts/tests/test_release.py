@@ -61,7 +61,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertNotIn("key", manifest)
             self.assertNotIn("update_url", manifest)
             self.assertEqual(manifest["manifest_version"], 3)
-            self.assertEqual(manifest["version"], "0.1.0")
+            self.assertEqual(manifest["version"], release.version())
             for icon in manifest["icons"].values():
                 self.assertIn(icon, archive.namelist())
             self.assertIn("background.js", archive.namelist())

@@ -27,8 +27,12 @@ for browser in ("chromium", "firefox"):
     for size in (16, 32, 48, 64, 128):
         shutil.copy2(root / "assets/branding/icons" / f"icon-{size}.png", icons / f"icon-{size}.png")
     json.loads((output / "manifest.json").read_text())
-    with zipfile.ZipFile(root / "dist" / f"rivet-{browser}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+    # Fixed metadata and stored entries make extension ZIPs identical across OS builds.
+    with zipfile.ZipFile(root / "dist" / f"rivet-{browser}.zip", "w") as archive:
         for source in sorted(output.rglob("*")):
             if source.is_file():
-                archive.write(source, source.relative_to(output))
+                entry = zipfile.ZipInfo(source.relative_to(output).as_posix(), (1980, 1, 1, 0, 0, 0))
+                entry.create_system = 3
+                entry.external_attr = 0o100644 << 16
+                archive.writestr(entry, source.read_bytes())
     print(output)

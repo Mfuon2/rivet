@@ -498,13 +498,20 @@ impl Engine {
         loop {
             let chunk = tokio::select! {
                 _ = cancel.cancelled() => { file.sync_all().await?; bail!("download paused"); },
-                result = response.chunk() => result?,
+                result = response.chunk() => match result {
+                    Ok(chunk) => chunk,
+                    Err(error) => {
+                        file.sync_all().await?;
+                        return Err(error.into());
+                    }
+                },
             };
             let Some(chunk) = chunk else {
                 break;
             };
             if chunk.len() as u64 > remaining {
                 // A complete-looking part from a malformed response must not be trusted on retry.
+                file.flush().await?;
                 let written = file.metadata().await?.len();
                 file.set_len(0).await?;
                 file.sync_all().await?;
@@ -523,7 +530,10 @@ impl Engine {
                 .completed
                 .fetch_add(payload.len() as u64, Ordering::Relaxed);
         }
-        ensure!(remaining == 0, "server truncated the requested range");
+        if remaining != 0 {
+            file.sync_all().await?;
+            bail!("server truncated the requested range");
+        }
         if let Some(byte) = final_byte {
             file.write_all(&[byte]).await?;
             progress.completed.fetch_add(1, Ordering::Relaxed);

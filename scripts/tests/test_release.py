@@ -44,6 +44,14 @@ class ReleaseTests(unittest.TestCase):
         release.checksums(self.folder)
         self.assertFalse(signature.exists())
 
+    def test_extension_packages_are_reproducible(self):
+        command = [__import__("sys").executable, str(release.ROOT / "scripts/package_browser.py")]
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+        first = [(release.ROOT / f"dist/rivet-{browser}.zip").read_bytes() for browser in ("chromium", "firefox")]
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+        second = [(release.ROOT / f"dist/rivet-{browser}.zip").read_bytes() for browser in ("chromium", "firefox")]
+        self.assertEqual(first, second)
+
     @unittest.skipUnless(shutil.which("minisign"), "Install Minisign for real cryptographic verification tests")
     def test_real_signature_verification_rejects_tampering_and_wrong_keys(self):
         private, public = self.folder / "temporary.key", self.folder / "temporary.pub"

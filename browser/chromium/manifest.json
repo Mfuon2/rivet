@@ -19,7 +19,18 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Rivet downloads"
+    "default_title": "Rivet downloads",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
   },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA12XfjmaYeKKeYkKGM7DhEa+Zp5U9PdVYGLpi5kgU9+R2nMx9dH/LgXZGi8oMH+IxsuHxtxS0wnbKndsV+nuN92MViWngXimDS9xwvX9o/OifC98r9EoViwAM3JscAMGPuKA0utW/ZPdaxLrknWHAwuK4fcN6XiRP6ennB591sk/3yfLi07n//qrfWcCKacJz5eUzvCWGxz//NsDKi+2552Tog+/jjqqKTHOxuX2z+9hyMsiDdMB/BE8DJN0fFJKmcq7rLsJXMuAoE736ieo2h/Cj8N0Jcv5YhoOgH4xvY/weAv2Jnfiv/Z061m9xTYqslP3tdHBclK0fhZ8yfAHpnwIDAQAB"
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA12XfjmaYeKKeYkKGM7DhEa+Zp5U9PdVYGLpi5kgU9+R2nMx9dH/LgXZGi8oMH+IxsuHxtxS0wnbKndsV+nuN92MViWngXimDS9xwvX9o/OifC98r9EoViwAM3JscAMGPuKA0utW/ZPdaxLrknWHAwuK4fcN6XiRP6ennB591sk/3yfLi07n//qrfWcCKacJz5eUzvCWGxz//NsDKi+2552Tog+/jjqqKTHOxuX2z+9hyMsiDdMB/BE8DJN0fFJKmcq7rLsJXMuAoE736ieo2h/Cj8N0Jcv5YhoOgH4xvY/weAv2Jnfiv/Z061m9xTYqslP3tdHBclK0fhZ8yfAHpnwIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

@@ -170,3 +170,12 @@ pub fn date(seconds: i64) -> String {
         })
         .unwrap_or_else(|| "—".into())
 }
+
+/// Product branding, separate from Lucide action and file icons.
+pub fn logo(size: f32) -> egui::Image<'static> {
+    egui::Image::from_bytes(
+        "bytes://rivet/logo.png",
+        include_bytes!("../../../assets/branding/icons/icon-256.png").as_slice(),
+    )
+    .fit_to_exact_size(egui::vec2(size, size))
+}

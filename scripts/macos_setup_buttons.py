@@ -1,4 +1,5 @@
 """Exercise native accessibility button actions and the OS clipboard in an isolated macOS Rivet process."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -93,6 +94,9 @@ default: exit(2)
 def main():
     if platform.system() != "Darwin":
         raise SystemExit("This native interaction check runs on macOS only")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--screenshots", action="store_true", help="Seed a local demo queue and refresh owned-window documentation previews")
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="rivet-buttons-") as temporary:
         folder = Path(temporary)
         swift = folder / "buttons.swift"
@@ -102,12 +106,19 @@ def main():
         backup = folder / "clipboard.plist"
         native("backup", backup)
         env = dict(os.environ, RIVET_DATABASE=str(folder / "queue.sqlite3"), RIVET_SETUP_ROOT=str(folder / "home"))
+        if args.screenshots:
+            examples = ["project-source.zip", "release-notes.pdf", "conference-talk.mp4", "ambient-session.flac", "rivet-setup.exe", "research-data.csv"]
+            for index in range(24):
+                name = f"{index+1:02d}-{examples[index % len(examples)]}"
+                subprocess.run([str(ROOT / "target/debug/rivet"), "add", "https://example.test/" + name, "-o", str(folder / name)], env=env, check=True, capture_output=True)
         process = subprocess.Popen([str(ROOT / "target/debug/rivet-desktop")], env=env, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             time.sleep(2)
             native("position", process.pid)
             time.sleep(0.5)
             window = json.loads(native("window", process.pid))
+            if args.screenshots:
+                subprocess.run(["screencapture", "-x", "-l", str(window["id"]), str(ROOT / "docs/startup-preview.png")], check=True, capture_output=True)
             def text():
                 screenshot = folder / "window.png"
                 subprocess.run(["screencapture", "-x", "-o", "-l", str(window["id"]), str(screenshot)], check=True, capture_output=True, timeout=10)
@@ -127,6 +138,8 @@ def main():
             assert any(row["text"] == "Copy browser setup address" for row in text()), "Setup did not return after rechecking"
             click("Continue to Rivet")
             assert any("Categories" in row["text"] for row in text()), "Continue did not open the download manager"
+            if args.screenshots:
+                subprocess.run(["screencapture", "-x", "-l", str(window["id"]), str(ROOT / "docs/desktop-preview.png")], check=True, capture_output=True)
             print(json.dumps({"native_copy_address": "passed", "native_copy_folder": "passed", "check_again": "passed", "continue_to_manager": "passed", "registration": "isolated temporary home", "clipboard": "restored after test"}, indent=2))
         finally:
             if process.poll() is None:

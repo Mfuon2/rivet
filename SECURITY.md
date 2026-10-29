@@ -16,4 +16,4 @@ Before public release: add checkpoint/per-part integrity, keychain-backed creden
 
 Report issues privately to the repository maintainer once a public repository and reporting channel are established. No reporting endpoint is configured in this local project.
 
-Release authenticity: the offline Minisign workflow signs final package checksums and verifies signatures before trusting the manifest. Private keys stay outside the repository; CI builds unsigned artifacts only. No production release key, public release, Windows Authenticode identity or Apple notarization is configured yet. Signing instructions are in release/README.md.
+Release authenticity: the offline Minisign workflow signs final package checksums and verifies signatures before trusting the manifest. Private keys stay outside the repository; CI builds unsigned artifacts only. The production public key is published in release/minisign.pub. The encrypted private key stays outside the repository and its password is protected by the maintainer's macOS Keychain. Windows Authenticode identity and Apple notarization are not configured. Signing instructions are in release/README.md.

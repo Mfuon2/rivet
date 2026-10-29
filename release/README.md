@@ -10,7 +10,7 @@ Install Minisign (macOS: `brew install minisign`; Ubuntu: `sudo apt install mini
 python3 scripts/release.py keygen
 ```
 
-Enter a strong password in your terminal. The script creates the encrypted private key at `~/.config/rivet-signing/minisign.key` and the public key at `release/minisign.pub`. Commit/publish only the public key and establish its fingerprint through trusted channels. Keep an offline backup of the private key and password separately. No private key or password is sent to GitHub by this workflow. A production key is deliberately not generated unattended or with a password chosen by an agent.
+A production public key is now published in `release/minisign.pub`; do not regenerate or replace that identity. The original maintainer's encrypted key stays outside Git. For a new independent fork, enter a strong password in your terminal. The script creates the encrypted private key at `~/.config/rivet-signing/minisign.key` and the public key at `release/minisign.pub`. Commit/publish only the public key and establish its fingerprint through trusted channels. Keep an offline backup of the private key and password separately. No private key or password is sent to GitHub by this workflow. The maintainer may instead authorize `python3 scripts/release.py keygen --keychain` on macOS. This generates a random password, stores it in the current user's Keychain under `org.rivet.downloads.minisign`, and encrypts the private key without putting the password in process arguments, logs or GitHub. Sign with `python3 scripts/release.py sign DIRECTORY --keychain`. Keychain Access can be used by the maintainer to manage/back up the credential. Never upload it or the private key.
 
 ## Build and package
 

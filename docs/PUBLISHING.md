@@ -1,6 +1,6 @@
 # Publishing Rivet with a verifiable publisher identity
 
-Status: development builds only. No browser-store submission, OS signing, notarization, public release or publisher-account configuration has been performed. Local tests do not constitute an independent security audit. Native packaging templates and a free signed-checksum workflow are now available. Complete installed-browser/platform installation tests and select a production signing identity before a public stable release.
+Status: development builds only. No browser-store submission, OS publisher signing, notarization or publisher-account configuration has been performed. A public Minisign verification key is available in release/minisign.pub; preview GitHub releases use signed checksums. Local tests do not constitute an independent security audit. Native packaging templates and a free signed-checksum workflow are now available. Complete installed-browser/platform installation tests and select a production signing identity before a public stable release.
 
 ## 1. Establish your publisher identity
 
@@ -28,7 +28,7 @@ Official instructions: [Chrome publishing](https://developer.chrome.com/docs/web
 
 Use [Minisign](https://jedisct1.github.io/minisign/) with an encrypted private key kept outside the repository. The tested scripts are in `scripts/release.py`; see [release/README.md](../release/README.md) for key generation, packaging, signing and verification. Native package templates now produce unsigned Windows EXE installers, macOS PKGs with ad-hoc-signed apps and Debian packages. These are development artifacts until installation testing and release signing are completed.
 
-The GitHub packaging workflow builds artifacts without signing credentials. Signing is performed locally after reviewing the final packages. A production key/password is not created unattended. Free Windows platform signing can be requested from [SignPath Foundation](https://signpath.org/terms) after the project meets its public release and governance requirements. The [application draft](publishing/SIGNPATH-DRAFT.md) and [store draft](publishing/STORE-DRAFT.md) are not submitted applications.
+The GitHub packaging workflow builds artifacts without signing credentials. Signing is performed locally after reviewing the final packages. The maintainer has authorized a production encrypted key with its random password stored in macOS Keychain; neither secret is sent to GitHub. Free Windows platform signing can be requested from [SignPath Foundation](https://signpath.org/terms) after the project meets its public release and governance requirements. The [application draft](publishing/SIGNPATH-DRAFT.md) and [store draft](publishing/STORE-DRAFT.md) are not submitted applications.
 
 Platform-recognized signing below is a separate optional later step. Open-source distribution and signed-checksum authentication do not require buying these services. macOS without Developer ID/notarization can involve additional user approval, and browser stores still enforce their extension signing/install rules.
 

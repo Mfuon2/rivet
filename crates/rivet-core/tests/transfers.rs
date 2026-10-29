@@ -28,6 +28,7 @@ enum Mode {
     Empty,
     UnknownSize,
     Overlong,
+    AbortAfterBody,
 }
 #[derive(Clone)]
 struct Fixture {
@@ -114,13 +115,23 @@ async fn handler(State(f): State<Fixture>, headers: HeaderMap) -> Response<Body>
     if overlong {
         chunks.push(Bytes::from_static(b"unexpected extra bytes"));
     }
-    let body = Body::from_stream(stream::unfold((chunks, 0), |(chunks, i)| async move {
-        if i == chunks.len() {
+    let abort_after_body = !probe && matches!(f.mode, Mode::AbortAfterBody);
+    let body = Body::from_stream(stream::unfold((chunks, 0), move |(chunks, i)| async move {
+        if i == chunks.len() && abort_after_body {
+            return Some((
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    "fixture body failure before clean EOF",
+                )),
+                (chunks, i + 1),
+            ));
+        }
+        if i >= chunks.len() {
             return None;
         }
         tokio::time::sleep(Duration::from_millis(2)).await;
         let chunk = chunks[i].clone();
-        Some((Ok::<_, std::convert::Infallible>(chunk), (chunks, i + 1)))
+        Some((Ok::<_, std::io::Error>(chunk), (chunks, i + 1)))
     }));
     let mut response = Response::builder().status(if ranged {
         StatusCode::PARTIAL_CONTENT
@@ -141,7 +152,7 @@ async fn handler(State(f): State<Fixture>, headers: HeaderMap) -> Response<Body>
             format!("bytes {actual_start}-{end}/{total}"),
         );
     }
-    if !truncated && !overlong && !matches!(f.mode, Mode::UnknownSize) {
+    if !truncated && !overlong && !abort_after_body && !matches!(f.mode, Mode::UnknownSize) {
         response = response.header("content-length", end - start + 1);
     }
     if matches!(f.mode, Mode::Encoded) {
@@ -380,4 +391,19 @@ async fn concurrent_writers_cannot_share_a_destination() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("owns this destination"));
     first.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn incomplete_response_framing_cannot_leave_a_completed_part_on_retry() {
+    let server = serve(Mode::AbortAfterBody).await;
+    let temp = TempDir::new().unwrap();
+    let r = request(&server, &temp);
+    assert!(
+        Engine::new(None)
+            .unwrap()
+            .download(r.clone(), CancellationToken::new(), Progress::default())
+            .await
+            .is_err()
+    );
+    assert!(!r.destination.exists());
 }

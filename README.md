@@ -1,5 +1,7 @@
 # Rivet
 
+<img src="assets/branding/icons/icon-128.png" width="96" height="96" alt="Rivet logo">
+
 An open source download manager in Rust for Windows, macOS, and Linux. MIT licensed, with no activation system, subscription gate, telemetry, or embedded advertising.
 
 **Status: working foundation, not full IDM parity.** The HTTP engine, durable queue, native desktop UI, CLI, native messaging helper, and original browser extensions are implemented. Advanced media assembly, site grabbing, FTP, secure credential storage, and platform-specific integration are tracked in [the capability matrix](docs/CAPABILITIES.md). Windows/Linux are CI targets; local verification so far is on macOS ARM64.
@@ -92,4 +94,4 @@ python3 scripts/release.py package --installer
 
 The native packaging tools are Inno Setup 6 on Windows, Apple's `pkgbuild` on macOS and `dpkg-deb` on Debian/Ubuntu. The output includes an installable package plus an archive and browser extension ZIPs. These are development packages: Windows installers are unsigned, macOS app signatures are ad hoc (not Developer ID/notarized), and browser-store approval is pending. The manual **Build unsigned release packages** workflow builds each OS on its own runner and retains downloadable CI artifacts; it does not publish a release or access a private signing key.
 
-Free release authentication uses Minisign-signed SHA-256 checksums. See [release signing](release/README.md), [download verification](release/VERIFYING.md) and [publishing preparation](docs/PUBLISHING.md). A production signing key has not been selected yet. SignPath application and store submission drafts are in [docs/publishing](docs/publishing/).
+Free release authentication uses Minisign-signed SHA-256 checksums. See [release signing](release/README.md), [download verification](release/VERIFYING.md) and [publishing preparation](docs/PUBLISHING.md). The public release verification key is published in `release/minisign.pub`; the encrypted private key remains outside GitHub. SignPath application and store submission drafts are in [docs/publishing](docs/publishing/).

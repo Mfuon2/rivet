@@ -11,6 +11,7 @@ OutputBaseFilename={#OutputName}
 Compression=lzma2
 SolidCompression=yes
 UninstallDisplayIcon={app}\bin\rivet-desktop.exe
+SetupIconFile={#SourceDir}\branding\Rivet.ico
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

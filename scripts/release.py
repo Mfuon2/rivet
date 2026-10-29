@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Build release packages and authenticate their checksums with an offline Minisign key."""
 import argparse
+import getpass
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import platform
 import plistlib
 import re
+import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -87,25 +91,58 @@ def minisign():
     return executable
 
 
-def keygen(key_dir):
+KEYCHAIN_SERVICE = "org.rivet.downloads.minisign"
+
+
+def keychain_password(create=False):
+    if platform.system() != "Darwin":
+        raise ValueError("Keychain signing is available on macOS only")
+    account = getpass.getuser()
+    result = subprocess.run(["security", "find-generic-password", "-a", account, "-s", KEYCHAIN_SERVICE, "-w"], capture_output=True, text=True)
+    if result.returncode == 0:
+        if create:
+            raise ValueError("A signing password already exists in Keychain; refusing to replace it")
+        return result.stdout.rstrip("\n")
+    if not create:
+        raise ValueError("Signing password is not available in this user's Keychain")
+    password = secrets.token_urlsafe(48)
+    # security's interactive mode keeps the password out of argv/process listings.
+    command = "add-generic-password -a {} -s {} -w {}\n".format(shlex.quote(account), shlex.quote(KEYCHAIN_SERVICE), shlex.quote(password))
+    stored = subprocess.run(["security", "-i"], input=command, capture_output=True, text=True)
+    if stored.returncode != 0:
+        raise ValueError("Could not store the signing password in Keychain")
+    retrieved = subprocess.run(["security", "find-generic-password", "-a", account, "-s", KEYCHAIN_SERVICE, "-w"], capture_output=True, text=True)
+    if retrieved.returncode != 0 or not hmac.compare_digest(retrieved.stdout.rstrip("\n"), password):
+        raise ValueError("Could not verify Keychain storage; no private key generated")
+    return password
+
+
+def keygen(key_dir, use_keychain=False):
     key_dir = key_dir.expanduser().resolve()
     if key_dir.is_relative_to(ROOT):
         raise ValueError("Private signing keys must live outside the repository")
     private = key_dir / "minisign.key"
     if private.exists() or PUBLIC_KEY.exists():
         raise ValueError("A key already exists; refusing to replace the release identity")
-    if not sys.stdin.isatty():
+    if not use_keychain and not sys.stdin.isatty():
         raise ValueError("Run keygen in your own terminal to enter a signing-key password securely")
     key_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name != "nt":
         key_dir.chmod(0o700)
-    run([minisign(), "-G", "-p", PUBLIC_KEY, "-s", private])
+    command = [minisign(), "-G", "-p", PUBLIC_KEY, "-s", private]
+    if use_keychain:
+        password = keychain_password(create=True)
+        result = subprocess.run(command, input=f"{password}\n{password}\n", text=True, capture_output=True)
+        if result.returncode != 0:
+            raise ValueError("Minisign key generation failed; the password remains protected in Keychain")
+    else:
+        run(command)
     if os.name != "nt":
         private.chmod(0o600)
     print(f"Public key: {PUBLIC_KEY}\nEncrypted private key: {private}\nBack up the private key and password separately. Commit only the public key.")
 
 
-def sign(directory, key, pubkey):
+def sign(directory, key, pubkey, use_keychain=False):
     directory, key, pubkey = directory.resolve(), key.expanduser().resolve(), pubkey.resolve()
     if key.is_relative_to(ROOT):
         raise ValueError("Keep private signing keys outside the repository")
@@ -113,7 +150,14 @@ def sign(directory, key, pubkey):
         raise ValueError("Signing key/public key missing. Run keygen first.")
     verify_hashes(directory)
     manifest = directory / CHECKSUMS
-    run([minisign(), "-S", "-s", key, "-m", manifest, "-t", f"Rivet {version()} release checksums"])
+    command = [minisign(), "-S", "-s", key, "-m", manifest, "-t", f"Rivet {version()} release checksums"]
+    if use_keychain:
+        password = keychain_password()
+        result = subprocess.run(command, input=password + "\n", capture_output=True, text=True)
+        if result.returncode != 0:
+            raise ValueError("Minisign signing failed; the encrypted private key was not exposed")
+    else:
+        run(command)
     verify(directory, pubkey)
 
 
@@ -138,11 +182,12 @@ def mac_bundle(stage, binaries, app_version):
     executable_dir.mkdir(parents=True)
     for name in ("rivet-desktop", "rivet-native-host", "rivet"):
         shutil.copy2(binaries / name, executable_dir / name)
-    info = {"CFBundleIdentifier": "org.rivet.downloads", "CFBundleName": "Rivet", "CFBundleDisplayName": "Rivet", "CFBundleExecutable": "rivet-desktop", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": app_version, "CFBundleVersion": app_version, "NSHighResolutionCapable": True}
+    info = {"CFBundleIdentifier": "org.rivet.downloads", "CFBundleName": "Rivet", "CFBundleDisplayName": "Rivet", "CFBundleExecutable": "rivet-desktop", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": app_version, "CFBundleVersion": app_version, "NSHighResolutionCapable": True, "CFBundleIconFile": "Rivet.icns"}
     (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     resources = app / "Contents/Resources"
     resources.mkdir()
     shutil.copy2(ROOT / "LICENSE", resources / "LICENSE")
+    shutil.copy2(ROOT / "assets/branding/Rivet.icns", resources / "Rivet.icns")
     shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", resources / "LUCIDE-LICENSE")
     # Ad-hoc signing is free and supports local integrity checks. It is NOT Developer ID/notarization.
     run(["codesign", "--force", "--deep", "--sign", "-", app])
@@ -156,6 +201,9 @@ def linux_deb(stage, output, base, app_version, machine):
     applications = package / "usr/share/applications"
     applications.mkdir(parents=True)
     shutil.copy2(ROOT / "packaging/rivet.desktop", applications / "org.rivet.downloads.desktop")
+    icons = package / "usr/share/icons/hicolor/256x256/apps"
+    icons.mkdir(parents=True)
+    shutil.copy2(ROOT / "assets/branding/icons/icon-256.png", icons / "org.rivet.downloads.png")
     licenses = package / "usr/share/doc/rivet"
     licenses.mkdir(parents=True)
     shutil.copy2(ROOT / "LICENSE", licenses / "copyright")
@@ -189,6 +237,7 @@ def package(output, installer=False):
         for name in ("README.md", "LICENSE", "SECURITY.md"):
             shutil.copy2(ROOT / name, bundle / name)
         shutil.copy2(ROOT / "release/VERIFYING.md", bundle / "VERIFYING.md")
+        shutil.copytree(ROOT / "assets/branding", bundle / "branding")
         shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", bundle / "LUCIDE-LICENSE")
         docs = bundle / "docs"
         docs.mkdir()
@@ -233,9 +282,11 @@ def main():
     p.add_argument("directory", type=Path)
     p = commands.add_parser("keygen")
     p.add_argument("--key-dir", type=Path, default=Path.home() / ".config/rivet-signing")
+    p.add_argument("--keychain", action="store_true", help="Generate a strong password and keep it in macOS Keychain")
     p = commands.add_parser("sign")
     p.add_argument("directory", type=Path)
     p.add_argument("--key", type=Path, default=Path.home() / ".config/rivet-signing/minisign.key")
+    p.add_argument("--keychain", action="store_true", help="Use the password protected by macOS Keychain")
     p.add_argument("--pubkey", type=Path, default=PUBLIC_KEY)
     p = commands.add_parser("verify")
     p.add_argument("directory", type=Path)
@@ -244,8 +295,8 @@ def main():
     try:
         if args.command == "package": package(args.output, args.installer)
         elif args.command == "checksums": checksums(args.directory)
-        elif args.command == "keygen": keygen(args.key_dir)
-        elif args.command == "sign": sign(args.directory, args.key, args.pubkey)
+        elif args.command == "keygen": keygen(args.key_dir, args.keychain)
+        elif args.command == "sign": sign(args.directory, args.key, args.pubkey, args.keychain)
         elif args.command == "verify": verify(args.directory, args.pubkey)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Release operation failed: {error}\n")

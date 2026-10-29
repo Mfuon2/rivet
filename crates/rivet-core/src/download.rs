@@ -6,6 +6,7 @@ use reqwest::{Client, StatusCode, Url, header};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    io::SeekFrom,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -15,7 +16,7 @@ use std::{
 };
 use tokio::{
     fs::{self, File, OpenOptions},
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     task::JoinSet,
 };
 use tokio_util::sync::CancellationToken;
@@ -444,10 +445,12 @@ impl Engine {
     ) -> Result<()> {
         let mut file = OpenOptions::new()
             .create(true)
-            .append(true)
+            // Windows append-only handles cannot truncate malformed range data.
+            .truncate(false)
+            .write(true)
             .open(path)
             .await?;
-        let existing = file.metadata().await?.len();
+        let existing = file.seek(SeekFrom::End(0)).await?;
         let size = segment.end - segment.start + 1;
         ensure!(existing <= size, "invalid partial segment length");
         if existing == size {
@@ -489,6 +492,9 @@ impl Engine {
                 "range body length does not match its bounds"
             );
         }
+        // A file reaches its full segment size only after the response ends cleanly.
+        // Otherwise a late body error could leave a full-looking part that a retry trusts.
+        let mut final_byte = None;
         loop {
             let chunk = tokio::select! {
                 _ = cancel.cancelled() => { file.sync_all().await?; bail!("download paused"); },
@@ -505,14 +511,24 @@ impl Engine {
                 progress.completed.fetch_sub(written, Ordering::Relaxed);
                 bail!("server exceeded requested range");
             }
-            file.write_all(&chunk).await?;
+            let payload = if !chunk.is_empty() && chunk.len() as u64 == remaining {
+                final_byte = chunk.last().copied();
+                &chunk[..chunk.len() - 1]
+            } else {
+                chunk.as_ref()
+            };
+            file.write_all(payload).await?;
             remaining -= chunk.len() as u64;
             progress
                 .completed
-                .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+                .fetch_add(payload.len() as u64, Ordering::Relaxed);
+        }
+        ensure!(remaining == 0, "server truncated the requested range");
+        if let Some(byte) = final_byte {
+            file.write_all(&[byte]).await?;
+            progress.completed.fetch_add(1, Ordering::Relaxed);
         }
         file.sync_all().await?;
-        ensure!(remaining == 0, "server truncated the requested range");
         Ok(())
     }
 

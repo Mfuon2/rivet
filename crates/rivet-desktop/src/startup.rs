@@ -67,7 +67,7 @@ impl Startup {
             egui::ScrollArea::vertical().show(ui, |ui| {
             ui.add_space(35.);
             ui.horizontal(|ui| {
-                ui.add(widgets::image("panels-top-left", 36., egui::Color32::from_rgb(66,130,193)));
+                ui.add(widgets::logo(48.));
                 ui.vertical(|ui| { ui.heading("Getting Rivet ready"); ui.label("Set up downloads for your default browser."); });
             });
             ui.add_space(18.);

@@ -1,11 +1,43 @@
 {
   "manifest_version": 2,
-  "name": "Rivet — Download Manager",
+  "name": "Rivet \u2014 Download Manager",
   "version": "0.1.0",
   "description": "Send links to your local Rivet queue. Media discovery requires explicit site permission.",
-  "permissions": ["contextMenus", "nativeMessaging", "activeTab", "storage", "webRequest"],
-  "optional_permissions": ["http://*/*", "https://*/*"],
-  "background": {"scripts": ["background.js"]},
-  "browser_action": {"default_popup": "popup.html", "default_title": "Rivet downloads"},
-  "browser_specific_settings": {"gecko": {"id": "rivet@rivet.local", "strict_min_version": "115.0"}}
+  "permissions": [
+    "contextMenus",
+    "nativeMessaging",
+    "activeTab",
+    "storage",
+    "webRequest"
+  ],
+  "optional_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_title": "Rivet downloads",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "rivet@rivet.local",
+      "strict_min_version": "115.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
 }

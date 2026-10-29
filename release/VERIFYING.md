@@ -19,4 +19,4 @@ python3 scripts/release.py verify /path/to/downloads --pubkey /path/to/trusted/m
 
 The script checks the signature first, rejects unsafe/duplicate manifest entries and verifies every listed package. Download all packages listed in this manifest when using its strict directory verifier. The signature covers the release manifest, not operating-system publisher identity. Windows Authenticode and Apple Developer ID/notarization are separate and are not claimed by this workflow.
 
-No production public key has been selected until the maintainer runs key generation and publishes `release/minisign.pub`. Never accept a test key as Rivet's release identity.
+Rivet's public release key is published at `release/minisign.pub` in the official `Mfuon2/rivet` repository. Its initial key ID is `FACB200CA8550759`. Verify the full public-key value against the established source repository; the short key ID alone is not a trust anchor. Never accept a test key as Rivet's release identity.

@@ -292,7 +292,7 @@ pub fn register(
     }
     Ok(path)
 }
-const ASSETS: [(&str, &[u8]); 5] = [
+const ASSETS: [(&str, &[u8]); 10] = [
     (
         "background.js",
         include_bytes!("../../../browser/shared/background.js"),
@@ -310,6 +310,26 @@ const ASSETS: [(&str, &[u8]); 5] = [
         include_bytes!("../../../browser/shared/popup.css"),
     ),
     ("manifest.json", b""),
+    (
+        "icons/icon-16.png",
+        include_bytes!("../../../assets/branding/icons/icon-16.png"),
+    ),
+    (
+        "icons/icon-32.png",
+        include_bytes!("../../../assets/branding/icons/icon-32.png"),
+    ),
+    (
+        "icons/icon-48.png",
+        include_bytes!("../../../assets/branding/icons/icon-48.png"),
+    ),
+    (
+        "icons/icon-64.png",
+        include_bytes!("../../../assets/branding/icons/icon-64.png"),
+    ),
+    (
+        "icons/icon-128.png",
+        include_bytes!("../../../assets/branding/icons/icon-128.png"),
+    ),
 ];
 pub fn prepare_extension(data: &Path, browser: Browser) -> Result<PathBuf> {
     let firefox = browser == Browser::Firefox;

@@ -84,6 +84,7 @@ impl App {
                             action = Some(Action::Browser);
                             ui.close();
                         }
+                        ui.add(widgets::logo(64.));
                         ui.label("Rivet 0.1 · MIT open source");
                         ui.label("No activation. No telemetry.");
                         ui.collapsing("Lucide icon license", |ui| {
@@ -95,6 +96,7 @@ impl App {
                         });
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(widgets::logo(22.));
                         ui.label(
                             RichText::new("RIVET")
                                 .strong()

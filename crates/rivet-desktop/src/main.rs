@@ -693,6 +693,12 @@ fn main() -> eframe::Result {
                 .map(|p| p.with_file_name("ui-state.ron")),
             viewport: egui::ViewportBuilder::default()
                 .with_title("Rivet — Download Manager")
+                .with_icon(
+                    eframe::icon_data::from_png_bytes(include_bytes!(
+                        "../../../assets/branding/icons/icon-256.png"
+                    ))
+                    .expect("bundled Rivet icon is valid PNG"),
+                )
                 .with_inner_size([1320., 780.])
                 .with_min_inner_size([980., 580.]),
             ..Default::default()

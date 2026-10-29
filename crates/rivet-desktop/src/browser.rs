@@ -9,7 +9,7 @@ impl App {
         egui::Window::new("Browser integration")
             .open(&mut open).default_width(650.).resizable(true).show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.add(widgets::image("panels-top-left", 28., Color32::from_rgb(66, 130, 193)));
+                    ui.add(widgets::logo(36.));
                     ui.vertical(|ui| {
                         ui.strong("Send browser downloads to Rivet");
                         ui.label("Install the Rivet extension, then connect its native helper.");

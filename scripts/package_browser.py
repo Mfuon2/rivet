@@ -22,8 +22,13 @@ for browser in ("chromium", "firefox"):
     for source in (root / "browser" / "shared").iterdir():
         if source.is_file():
             shutil.copyfile(source, output / source.name)
+    icons = output / "icons"
+    icons.mkdir(exist_ok=True)
+    for size in (16, 32, 48, 64, 128):
+        shutil.copy2(root / "assets/branding/icons" / f"icon-{size}.png", icons / f"icon-{size}.png")
     json.loads((output / "manifest.json").read_text())
     with zipfile.ZipFile(root / "dist" / f"rivet-{browser}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-        for source in sorted(output.iterdir()):
-            archive.write(source, source.name)
+        for source in sorted(output.rglob("*")):
+            if source.is_file():
+                archive.write(source, source.relative_to(output))
     print(output)

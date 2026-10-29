@@ -31,7 +31,7 @@ Install the matching desktop/native-helper package; launch Rivet to prepare defa
 ## Submission blockers
 
 - Final publisher/support/privacy-policy URLs.
-- Store icons and extension screenshots.
+- Extension icons now use the maintainer-supplied Rivet globe/arrow artwork. Final extension screenshots are still needed.
 - Production IDs/public keys, actual signed installers/extensions and clean-machine test instructions.
 - Current Firefox data-transmission declaration review. Native messaging transfers URLs outside the local browser; do not select “none” without checking Mozilla's applicable policy. The current development manifest is not represented as store-ready.
 - Installed Chrome/Edge/Firefox interaction, permission and extension-update testing.

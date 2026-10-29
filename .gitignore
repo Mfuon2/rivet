@@ -1,0 +1,16 @@
+/target/
+*.sqlite3*
+*.rivet/
+browser/native-host.json
+/dist/
+
+
+# Private signing material never belongs in source or release uploads.
+*.key
+*.p12
+*.pfx
+*.pem
+__pycache__/
+
+# Local development conversation checkpoints.
+docs/SESSION-NOTES.md

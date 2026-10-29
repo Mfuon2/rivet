@@ -1,0 +1,42 @@
+{
+  "fixture_bytes": 8388608,
+  "fixture_sha256": "7d212b9c884f5c77896de960ae17cc341cda43b14d6a971f34ca29ebd4badf7f",
+  "per_response_throttle": "64 KiB per 8 ms",
+  "measurements": [
+    {
+      "connections": 1,
+      "median_seconds": 1.35472841700539,
+      "median_mib_per_second": 5.905242629872561,
+      "trial_seconds": [
+        1.9267758331261575,
+        1.35472841700539,
+        1.3109040837734938
+      ],
+      "speedup_vs_single_connection": 1.0
+    },
+    {
+      "connections": 4,
+      "median_seconds": 0.41242070915177464,
+      "median_mib_per_second": 19.397668018304884,
+      "trial_seconds": [
+        0.4112198748625815,
+        0.42072633327916265,
+        0.41242070915177464
+      ],
+      "speedup_vs_single_connection": 3.284821511004282
+    },
+    {
+      "connections": 8,
+      "median_seconds": 0.3449262077920139,
+      "median_mib_per_second": 23.193366636912376,
+      "trial_seconds": [
+        0.354052625130862,
+        0.3437108751386404,
+        0.3449262077920139
+      ],
+      "speedup_vs_single_connection": 3.9275891086312407
+    }
+  ],
+  "scope": "Local controlled per-response throttling. Not an Internet speed guarantee or an IDM benchmark.",
+  "strategy": "Bounded dynamic scheduling over preplanned ranges; pooled HTTP connections. Mid-response segment splitting remains planned."
+}

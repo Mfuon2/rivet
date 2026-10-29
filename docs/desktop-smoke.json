@@ -1,0 +1,10 @@
+{
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "isolated_database": true,
+  "synthetic_queued_entries": 0,
+  "fixture_downloads_started": false,
+  "startup_alive_after_3_seconds": true,
+  "visible_owned_window": true,
+  "screenshot_saved": true,
+  "stderr": ""
+}

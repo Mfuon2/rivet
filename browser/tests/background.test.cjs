@@ -1,0 +1,87 @@
+const {test} = require("node:test");
+const assert = require("node:assert/strict");
+const vm = require("node:vm");
+const fs = require("node:fs");
+const path = require("node:path");
+
+function fixture() {
+  const events = {};
+  const sent = [];
+  const event = name => ({addListener: callback => { events[name] = callback; }});
+  const api = {
+    runtime: {onStartup: event("startup"), onInstalled: event("installed"), onMessage: event("message"), sendNativeMessage: async (host, payload) => { sent.push({host, payload}); return {ok: true, id: "queued-job"}; }},
+    storage: {local: {get: async () => ({}), set: async () => {}}},
+    permissions: {contains: async () => true},
+    contextMenus: {removeAll: async () => {}, create: () => {}, onClicked: event("click")},
+    webRequest: {onHeadersReceived: event("headers")},
+    tabs: {onRemoved: event("removed"), onUpdated: event("updated")},
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../shared/background.js"), "utf8"), {browser: api, URL, console});
+  const message = payload => new Promise(resolve => events.message(payload, {}, resolve));
+  return {events, sent, api, message};
+}
+const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test("media discovery requires explicit enable even when browser grants activeTab access", async () => {
+  const f = fixture();
+  const details = {tabId: 7, url: "https://media.example/video.mp4?token=private", responseHeaders: [{name: "Content-Type", value: "video/mp4"}]};
+  f.events.headers(details); await flush();
+  assert.equal((await f.message({type: "list", tabId: 7})).items.length, 0);
+  assert.equal((await f.message({type: "enable", origin: "https://media.example"})).ok, true);
+  f.events.headers(details); await flush();
+  const items = (await f.message({type: "list", tabId: 7})).items;
+  assert.equal(items.length, 1);
+  assert.equal(items[0].url, details.url);
+  assert.equal(f.sent.length, 0, "discovery must never initiate a download");
+  assert.equal((await f.message({type: "capture", url: details.url})).ok, true);
+  assert.equal(f.sent[0].host, "org.rivet.downloads");
+  assert.deepEqual(Object.keys(f.sent[0].payload), ["url"], "no cookies or page data in native payload");
+  await f.message({type: "disable", origin: "https://media.example"});
+  assert.equal((await f.message({type: "list", tabId: 7})).items.length, 0);
+});
+
+test("unsafe URLs cannot reach the native host", async () => {
+  const f = fixture();
+  assert.equal((await f.message({type: "capture", url: "file:///etc/passwd"})).ok, false);
+  assert.equal((await f.message({type: "capture", url: "https://user:secret@example.com/file"})).ok, false);
+  assert.equal(f.sent.length, 0);
+});
+
+test("site toggle requires browser permission and direct-media detection is bounded", async () => {
+  const f = fixture();
+  f.api.permissions.contains = async () => false;
+  assert.equal((await f.message({type: "enable", origin: "https://media.example"})).ok, false);
+  f.api.permissions.contains = async () => true;
+  await f.message({type: "enable", origin: "https://media.example"});
+  for (let n=0; n<80; n++) f.events.headers({tabId: 1, url: `https://media.example/${n}.mp4`, responseHeaders: []});
+  await flush();
+  assert.equal((await f.message({type: "list", tabId: 1})).items.length, 50);
+  f.events.removed(1);
+  assert.equal((await f.message({type: "list", tabId: 1})).items.length, 0);
+});
+
+
+test("connection probe sends no URL and handles absent or outdated hosts", async () => {
+  const f = fixture();
+  f.api.runtime.sendNativeMessage = async (host, payload) => {
+    f.sent.push({host, payload}); return {ok: true, id: null};
+  };
+  assert.equal((await f.message({type: "ping"})).ok, true);
+  assert.equal(f.sent[0].host, "org.rivet.downloads");
+  assert.equal(JSON.stringify(f.sent[0].payload), '{"type":"ping"}');
+  f.api.runtime.sendNativeMessage = async () => ({ok: true, id: "unexpected-job"});
+  assert.equal((await f.message({type: "ping"})).ok, false);
+  f.api.runtime.sendNativeMessage = async () => { throw new Error("private local path"); };
+  const failed = await f.message({type: "ping"});
+  assert.equal(failed.ok, false);
+  assert.ok(!failed.error.includes("private local path"));
+});
+
+
+test("browser startup announces only a queue-free native connection", async () => {
+  const f = fixture();
+  f.events.startup(); await flush();
+  assert.equal(f.sent.length, 1);
+  assert.equal(JSON.stringify(f.sent[0].payload), '{"type":"ping"}');
+  assert.equal((await f.message({type: "list", tabId: 7})).items.length, 0);
+});

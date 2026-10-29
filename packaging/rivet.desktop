@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Rivet
+Comment=Open source download manager
+Exec=/opt/rivet/rivet-desktop
+Icon=folder-download
+Terminal=false
+Categories=Network;FileTransfer;

@@ -1,0 +1,9 @@
+{
+  "cli_transfer": "passed",
+  "durable_queue_worker": "passed",
+  "native_host_framing_and_queue_only": "passed",
+  "host_manifest": "passed",
+  "fixture_sha256": "0d143b311424605f13b3e6f47e54faf1a95ba7e08ea373ef40f946208d276647",
+  "all_network_traffic": "local HTTP fixture",
+  "original_application_executed": false
+}

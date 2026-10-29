@@ -1,0 +1,19 @@
+[package]
+name = "rivet-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rivet"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+directories.workspace = true
+rivet-core = { path = "../rivet-core" }
+serde_json.workspace = true
+tokio.workspace = true
+

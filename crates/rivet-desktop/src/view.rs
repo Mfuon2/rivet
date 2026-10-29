@@ -43,6 +43,7 @@ impl App {
                         (
                             "Downloads",
                             vec![
+                                ("Download progress…", Action::Progress),
                                 ("Resume selected", Action::Resume),
                                 ("Stop selected", Action::Stop),
                                 ("Stop all", Action::StopAll),
@@ -461,15 +462,24 @@ impl App {
                             let job = &jobs[index];
                             row.set_selected(self.selected.contains(&job.id));
                             let (bytes, total, rate) = self.metrics(job);
+                            let mut name_clicked = false;
+                            let mut name_double_clicked = false;
                             for field in &columns {
                                 row.col(|ui| match field {
                                     Field::Name => {
                                         let (icon, color) = widgets::category_icon(category(job));
                                         ui.add(widgets::image(icon, 15., color));
-                                        ui.add(egui::Label::new(filename(job)).truncate())
+                                        let response = ui
+                                            .add(
+                                                egui::Button::new(filename(job))
+                                                    .frame(false)
+                                                    .truncate(),
+                                            )
                                             .on_hover_text(
                                                 job.request.destination.display().to_string(),
                                             );
+                                        name_clicked = response.clicked();
+                                        name_double_clicked = response.double_clicked();
                                     }
                                     Field::Queue => {
                                         ui.label(if job.status == "queued" { "Q" } else { "" });
@@ -554,18 +564,29 @@ impl App {
                                 });
                             }
                             let response = row.response();
-                            if response.clicked() {
-                                self.select(index, &jobs, ctx.input(|i| i.modifiers));
+                            if response.clicked() || name_clicked {
+                                let modifiers = ctx.input(|i| i.modifiers);
+                                self.select(index, &jobs, modifiers);
+                                if modifiers == egui::Modifiers::NONE
+                                    && self.transfer_progress.contains_key(&job.id)
+                                {
+                                    self.open_transfer(job.id.clone());
+                                }
                             }
-                            if response.double_clicked() {
+                            if response.double_clicked() || name_double_clicked {
                                 self.selected = HashSet::from([job.id.clone()]);
-                                self.open_properties(job.id.clone());
+                                if self.transfer_progress.contains_key(&job.id) {
+                                    self.open_transfer(job.id.clone());
+                                } else {
+                                    self.open_properties(job.id.clone());
+                                }
                             }
                             if response.secondary_clicked() && !self.selected.contains(&job.id) {
                                 self.selected = HashSet::from([job.id.clone()]);
                             }
                             response.context_menu(|ui| {
                                 for (label, value) in [
+                                    ("Download progress…", Action::Progress),
                                     ("Resume", Action::Resume),
                                     ("Stop", Action::Stop),
                                     ("Properties…", Action::Properties),
@@ -669,6 +690,7 @@ impl App {
         self.options(ctx);
         self.scheduler(ctx);
         self.properties_dialog(ctx);
+        self.transfer_dialog(ctx);
         self.browser_dialog(ctx);
     }
 

@@ -1,4 +1,6 @@
 //! HTTP transfers with independently validated ranges and conservative resume.
+pub use crate::progress::Progress;
+use crate::progress::{SegmentProgress, TransferState};
 use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
 use futures_util::StreamExt;
@@ -8,10 +10,7 @@ use sha2::{Digest, Sha256};
 use std::{
     io::SeekFrom,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::atomic::Ordering,
     time::Duration,
 };
 use tokio::{
@@ -63,20 +62,6 @@ impl DownloadRequest {
             );
         }
         Ok(())
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct Progress {
-    pub completed: Arc<AtomicU64>,
-    pub total: Arc<AtomicU64>,
-}
-impl Progress {
-    pub fn snapshot(&self) -> (u64, u64) {
-        (
-            self.completed.load(Ordering::Relaxed),
-            self.total.load(Ordering::Relaxed),
-        )
     }
 }
 
@@ -206,6 +191,32 @@ impl Engine {
         cancel: CancellationToken,
         progress: Progress,
     ) -> Result<DownloadResult> {
+        progress.initialize(Vec::new(), false);
+        progress.completed.store(0, Ordering::Relaxed);
+        progress.total.store(0, Ordering::Relaxed);
+        progress.set_state(TransferState::Connecting);
+        let result = self
+            .download_inner(request, cancel.clone(), progress.clone())
+            .await;
+        if let Ok(done) = &result {
+            progress.total.store(done.bytes, Ordering::Relaxed);
+        }
+        progress.finish(if result.is_ok() {
+            TransferState::Complete
+        } else if cancel.is_cancelled() {
+            TransferState::Paused
+        } else {
+            TransferState::Failed
+        });
+        result
+    }
+
+    async fn download_inner(
+        &self,
+        request: DownloadRequest,
+        cancel: CancellationToken,
+        progress: Progress,
+    ) -> Result<DownloadResult> {
         request.validate()?;
         ensure!(
             !request.destination.try_exists()?,
@@ -302,10 +313,26 @@ impl Engine {
     ) -> Result<DownloadResult> {
         let assembled = work.join("assembled");
         if segments.is_empty() {
+            let stream = SegmentProgress::new(0, remote.total);
+            progress.initialize(vec![stream.clone()], false);
             // No strong validator: restart a single stream rather than splice representations.
-            self.single(&request.url, &remote, &assembled, &cancel, &progress)
-                .await?;
+            self.single(
+                &request.url,
+                &remote,
+                &assembled,
+                &cancel,
+                &progress,
+                &stream,
+            )
+            .await?;
+            stream.set_state(TransferState::Complete);
         } else {
+            let trackers: Vec<_> = segments
+                .iter()
+                .map(|s| SegmentProgress::new(s.start, Some(s.end - s.start + 1)))
+                .collect();
+            progress.initialize(trackers.clone(), true);
+            progress.set_state(TransferState::Receiving);
             let children = cancel.child_token();
             let mut tasks = JoinSet::new();
             let mut pending = std::collections::VecDeque::new();
@@ -321,23 +348,31 @@ impl Engine {
                     "partial segment is larger than expected"
                 );
                 progress.completed.fetch_add(existing, Ordering::Relaxed);
+                trackers[index]
+                    .downloaded
+                    .store(existing, Ordering::Relaxed);
                 if existing < segment.end - segment.start + 1 {
-                    pending.push_back((path, segment.clone()));
+                    pending.push_back((index, path, segment.clone()));
+                } else {
+                    trackers[index].set_state(TransferState::Complete);
                 }
             }
-            let launch = |tasks: &mut JoinSet<Result<()>>, (path, segment): (PathBuf, Segment)| {
-                let (engine, remote, token, progress) = (
-                    self.clone(),
-                    remote.clone(),
-                    children.clone(),
-                    progress.clone(),
-                );
-                tasks.spawn(async move {
-                    engine
-                        .segment(&remote, &segment, &path, &token, &progress)
-                        .await
-                });
-            };
+            let launch =
+                |tasks: &mut JoinSet<Result<()>>,
+                 (index, path, segment): (usize, PathBuf, Segment)| {
+                    let tracker = trackers[index].clone();
+                    let (engine, remote, token, progress) = (
+                        self.clone(),
+                        remote.clone(),
+                        children.clone(),
+                        progress.clone(),
+                    );
+                    tasks.spawn(async move {
+                        engine
+                            .segment(&remote, &segment, &path, &token, &progress, &tracker)
+                            .await
+                    });
+                };
             // Workers take another range as soon as they finish: fast connections do not
             // sit idle behind a single slow static partition. All clients share one pool.
             while tasks.len() < usize::from(request.connections) {
@@ -365,6 +400,7 @@ impl Engine {
                 return Err(error);
             }
             ensure!(!cancel.is_cancelled(), "download paused");
+            progress.set_state(TransferState::Assembling);
             let mut output = File::create(&assembled).await?;
             for index in 0..segments.len() {
                 let mut input = File::open(work.join(format!("part-{index:02}"))).await?;
@@ -377,6 +413,7 @@ impl Engine {
         if let Some(total) = remote.total {
             ensure!(bytes == total, "download length mismatch");
         }
+        progress.set_state(TransferState::Verifying);
         let mut file = File::open(&assembled).await?;
         let mut hasher = Sha256::new();
         let mut buffer = vec![0; 256 * 1024];
@@ -412,6 +449,7 @@ impl Engine {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn segment(
         &self,
         remote: &Remote,
@@ -419,15 +457,21 @@ impl Engine {
         path: &Path,
         cancel: &CancellationToken,
         progress: &Progress,
+        tracker: &SegmentProgress,
     ) -> Result<()> {
         for attempt in 0..=self.retries {
+            tracker.set_state(TransferState::Connecting);
             let result = self
-                .segment_attempt(remote, segment, path, cancel, progress)
+                .segment_attempt(remote, segment, path, cancel, progress, tracker)
                 .await;
             match result {
-                Ok(()) => return Ok(()),
+                Ok(()) => {
+                    tracker.set_state(TransferState::Complete);
+                    return Ok(());
+                }
                 Err(e) if attempt == self.retries || cancel.is_cancelled() => return Err(e),
                 Err(_) => {
+                    tracker.set_state(TransferState::Retrying);
                     tokio::select! { _ = cancel.cancelled() => bail!("download paused"), _ = tokio::time::sleep(Duration::from_millis(250 * (1 << attempt))) => {} }
                 }
             }
@@ -435,6 +479,7 @@ impl Engine {
         unreachable!()
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn segment_attempt(
         &self,
         remote: &Remote,
@@ -442,6 +487,7 @@ impl Engine {
         path: &Path,
         cancel: &CancellationToken,
         progress: &Progress,
+        tracker: &SegmentProgress,
     ) -> Result<()> {
         let mut file = OpenOptions::new()
             .create(true)
@@ -451,6 +497,7 @@ impl Engine {
             .open(path)
             .await?;
         let existing = file.seek(SeekFrom::End(0)).await?;
+        tracker.downloaded.store(existing, Ordering::Relaxed);
         let size = segment.end - segment.start + 1;
         ensure!(existing <= size, "invalid partial segment length");
         if existing == size {
@@ -485,6 +532,7 @@ impl Engine {
                 == remote.etag.as_deref(),
             "range ETag changed or disappeared"
         );
+        tracker.set_state(TransferState::Receiving);
         let mut remaining = size - existing;
         if let Some(length) = response.content_length() {
             ensure!(
@@ -516,6 +564,7 @@ impl Engine {
                 file.set_len(0).await?;
                 file.sync_all().await?;
                 progress.completed.fetch_sub(written, Ordering::Relaxed);
+                tracker.downloaded.store(0, Ordering::Relaxed);
                 bail!("server exceeded requested range");
             }
             let payload = if !chunk.is_empty() && chunk.len() as u64 == remaining {
@@ -529,6 +578,9 @@ impl Engine {
             progress
                 .completed
                 .fetch_add(payload.len() as u64, Ordering::Relaxed);
+            tracker
+                .downloaded
+                .fetch_add(payload.len() as u64, Ordering::Relaxed);
         }
         if remaining != 0 {
             file.sync_all().await?;
@@ -537,11 +589,13 @@ impl Engine {
         if let Some(byte) = final_byte {
             file.write_all(&[byte]).await?;
             progress.completed.fetch_add(1, Ordering::Relaxed);
+            tracker.downloaded.fetch_add(1, Ordering::Relaxed);
         }
         file.sync_all().await?;
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn single(
         &self,
         url: &str,
@@ -549,7 +603,9 @@ impl Engine {
         path: &Path,
         cancel: &CancellationToken,
         progress: &Progress,
+        tracker: &SegmentProgress,
     ) -> Result<()> {
+        tracker.set_state(TransferState::Connecting);
         let response = tokio::select! {
             _ = cancel.cancelled() => bail!("download paused"),
             r = self.client.get(url).header(header::ACCEPT_ENCODING, "identity").send() => r?,
@@ -579,6 +635,8 @@ impl Engine {
         }
         let mut file = File::create(path).await?;
         progress.completed.store(0, Ordering::Relaxed);
+        progress.set_state(TransferState::Receiving);
+        tracker.set_state(TransferState::Receiving);
         let mut stream = response.bytes_stream();
         loop {
             let chunk = tokio::select! {
@@ -599,6 +657,9 @@ impl Engine {
             file.write_all(&chunk).await?;
             progress
                 .completed
+                .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+            tracker
+                .downloaded
                 .fetch_add(chunk.len() as u64, Ordering::Relaxed);
         }
         file.sync_all().await?;

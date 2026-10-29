@@ -19,8 +19,9 @@ Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause a
 - SHA-256 verification, with an optional expected checksum.
 - Persistent queue and download history, one-time scheduling, and batch actions.
 - Compact desktop interface with categories, live progress, sortable/resizable columns, and light/dark themes.
+- Click an active download to open live segment progress, byte ranges, pause and resume controls.
 - Chrome, Edge, Chromium, and Firefox link handoff through a local native helper.
-- Optional media-link discovery for sites you explicitly enable.
+- Optional media-link discovery and an in-page download widget for sites you explicitly enable.
 - CLI support for downloads, queue management, and HTTP/SOCKS proxy settings.
 
 Rivet has no activation, subscription gate, advertising, or telemetry.

@@ -6,7 +6,7 @@ use axum::{
     routing::get,
 };
 use futures_util::stream;
-use rivet_core::{CancellationToken, DownloadRequest, Engine, Progress};
+use rivet_core::{CancellationToken, DownloadRequest, Engine, Progress, TransferState};
 use sha2::{Digest, Sha256};
 use std::{
     sync::{
@@ -175,12 +175,29 @@ async fn segmented_download_is_byte_exact_and_never_overwrites() {
         Sha256::digest(server.fixture.data.as_slice())
     ));
     let engine = Engine::new(None).unwrap();
+    let progress = Progress::default();
     let result = engine
-        .download(r.clone(), CancellationToken::new(), Progress::default())
+        .download(r.clone(), CancellationToken::new(), progress.clone())
         .await
         .unwrap();
     assert_eq!(std::fs::read(&r.destination).unwrap(), *server.fixture.data);
     assert_eq!(result.bytes, 1024 * 1024);
+    let detail = progress.transfer_snapshot();
+    assert_eq!(detail.state, TransferState::Complete);
+    assert!(detail.resumable);
+    assert_eq!(detail.segments.len(), 4);
+    let mut next = 0;
+    for segment in &detail.segments {
+        assert_eq!(segment.start, next);
+        assert_eq!(segment.state, TransferState::Complete);
+        assert_eq!(Some(segment.downloaded), segment.total);
+        next = segment.end.unwrap() + 1;
+    }
+    assert_eq!(next, result.bytes);
+    assert_eq!(
+        detail.segments.iter().map(|s| s.downloaded).sum::<u64>(),
+        result.bytes
+    );
     assert!(
         engine
             .download(r, CancellationToken::new(), Progress::default())
@@ -211,11 +228,88 @@ async fn cancelled_ranges_resume_without_corruption() {
     token.cancel();
     assert!(task.await.unwrap().is_err());
     assert!(!r.destination.exists());
+    let paused = progress.transfer_snapshot();
+    assert_eq!(paused.state, TransferState::Paused);
+    assert!(
+        paused
+            .segments
+            .iter()
+            .any(|s| s.state == TransferState::Paused)
+    );
+    assert!(
+        paused
+            .segments
+            .iter()
+            .all(|s| matches!(s.state, TransferState::Paused | TransferState::Complete))
+    );
+    assert_eq!(
+        paused.segments.iter().map(|s| s.downloaded).sum::<u64>(),
+        progress.snapshot().0
+    );
+    for segment in &paused.segments {
+        let part = r
+            .destination
+            .with_file_name("download.bin.rivet")
+            .join(format!("part-{:02}", segment.id - 1));
+        let persisted = std::fs::metadata(part).map(|m| m.len()).unwrap_or(0);
+        assert_eq!(segment.downloaded, persisted);
+    }
+    let resumed = Progress::default();
+    let mut resumed_request = r.clone();
+    resumed_request.connections = 1;
     engine
-        .download(r.clone(), CancellationToken::new(), Progress::default())
+        .download(resumed_request, CancellationToken::new(), resumed.clone())
         .await
         .unwrap();
     assert_eq!(std::fs::read(r.destination).unwrap(), *server.fixture.data);
+    let detail = resumed.transfer_snapshot();
+    assert_eq!(detail.state, TransferState::Complete);
+    assert_eq!(
+        detail
+            .segments
+            .iter()
+            .map(|s| (s.start, s.end))
+            .collect::<Vec<_>>(),
+        paused
+            .segments
+            .iter()
+            .map(|s| (s.start, s.end))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        detail.segments.iter().map(|s| s.downloaded).sum::<u64>(),
+        1024 * 1024
+    );
+}
+
+#[tokio::test]
+async fn single_stream_telemetry_does_not_invent_parallel_segments() {
+    for mode in [
+        Mode::IgnoreRanges,
+        Mode::NoValidator,
+        Mode::UnknownSize,
+        Mode::Empty,
+    ] {
+        let server = serve(mode).await;
+        let temp = TempDir::new().unwrap();
+        let progress = Progress::default();
+        let result = Engine::new(None)
+            .unwrap()
+            .download(
+                request(&server, &temp),
+                CancellationToken::new(),
+                progress.clone(),
+            )
+            .await
+            .unwrap();
+        let detail = progress.transfer_snapshot();
+        assert_eq!(detail.state, TransferState::Complete);
+        assert!(!detail.resumable);
+        assert_eq!(detail.segments.len(), 1);
+        assert_eq!(detail.segments[0].state, TransferState::Complete);
+        assert_eq!(detail.segments[0].downloaded, result.bytes);
+        assert_eq!(progress.snapshot(), (result.bytes, result.bytes));
+    }
 }
 
 #[tokio::test]

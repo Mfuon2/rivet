@@ -43,6 +43,7 @@ impl Browser {
 #[derive(Deserialize)]
 pub struct Distribution {
     pub chromium_extension_id: String,
+    pub chrome_store_extension_id: Option<String>,
     pub edge_extension_id: Option<String>,
     pub firefox_extension_id: String,
     pub chrome_store_url: Option<String>,
@@ -72,6 +73,17 @@ impl Distribution {
             Browser::Edge => self.edge_store_url.as_deref(),
             Browser::Firefox => self.firefox_install_url.as_deref(),
         }
+    }
+    pub fn extension_ids(&self, browser: Browser) -> Vec<&str> {
+        let mut ids = vec![self.extension_id(browser)];
+        if browser != Browser::Firefox
+            && !(browser == Browser::Edge && self.edge_extension_id.is_some())
+            && let Some(id) = self.chrome_store_extension_id.as_deref()
+            && !ids.contains(&id)
+        {
+            ids.push(id);
+        }
+        ids
     }
 }
 /// Only recognized stable-channel identifiers; unknown browsers are reported, never guessed.
@@ -244,15 +256,16 @@ pub fn register(
             "Native helper is not executable"
         );
     }
-    let id = distribution.extension_id(browser);
+    let ids = distribution.extension_ids(browser);
     if browser != Browser::Firefox {
         ensure!(
-            id.len() == 32 && id.bytes().all(|c| (b'a'..=b'p').contains(&c)),
+            ids.iter()
+                .all(|id| id.len() == 32 && id.bytes().all(|c| (b'a'..=b'p').contains(&c))),
             "Invalid Chromium extension ID"
         );
     } else {
         ensure!(
-            !id.is_empty() && id.len() <= 255,
+            ids.iter().all(|id| !id.is_empty() && id.len() <= 255),
             "Invalid Firefox extension ID"
         );
     }
@@ -262,9 +275,13 @@ pub fn register(
     } else {
         "allowed_origins"
     }] = if browser == Browser::Firefox {
-        serde_json::json!([id])
+        serde_json::json!(ids)
     } else {
-        serde_json::json!([format!("chrome-extension://{id}/")])
+        serde_json::json!(
+            ids.iter()
+                .map(|id| format!("chrome-extension://{id}/"))
+                .collect::<Vec<_>>()
+        )
     };
     let path = manifest_path(platform, home, data, browser);
     write_if_changed(&path, &serde_json::to_vec_pretty(&manifest)?)?;
@@ -292,7 +309,11 @@ pub fn register(
     }
     Ok(path)
 }
-const ASSETS: [(&str, &[u8]); 10] = [
+const ASSETS: [(&str, &[u8]); 11] = [
+    (
+        "media-widget.js",
+        include_bytes!("../../../browser/shared/media-widget.js"),
+    ),
     (
         "background.js",
         include_bytes!("../../../browser/shared/background.js"),
@@ -357,31 +378,26 @@ pub struct ConnectionReceipt {
 }
 pub fn record_connection(database: &Path, arguments: &[String]) -> Result<()> {
     let distribution = Distribution::bundled()?;
-    let chrome_origin = format!("chrome-extension://{}/", distribution.chromium_extension_id);
-    let edge_origin = distribution
-        .edge_extension_id
-        .as_ref()
-        .map(|id| format!("chrome-extension://{id}/"));
-    let id = if edge_origin
-        .as_ref()
-        .is_some_and(|origin| arguments.iter().any(|v| v == origin))
-    {
-        distribution.edge_extension_id.unwrap()
-    } else if arguments.iter().any(|v| v == &chrome_origin) {
-        distribution.chromium_extension_id
-    } else if arguments
-        .iter()
-        .any(|v| v == &distribution.firefox_extension_id)
-    {
-        distribution.firefox_extension_id
-    } else {
+    let id = [Browser::Chrome, Browser::Edge, Browser::Firefox]
+        .into_iter()
+        .find_map(|browser| {
+            distribution.extension_ids(browser).into_iter().find(|id| {
+                let expected = if browser == Browser::Firefox {
+                    id.to_string()
+                } else {
+                    format!("chrome-extension://{id}/")
+                };
+                arguments.iter().any(|v| v == &expected)
+            })
+        });
+    let Some(id) = id else {
         return Ok(());
     };
     let parent = database.parent().context("Missing data folder")?;
     write_if_changed(
         &parent.join("browser-connection.json"),
         &serde_json::to_vec(&ConnectionReceipt {
-            extension_id: id,
+            extension_id: id.to_owned(),
             time: crate::queue::now(),
         })?,
     )?;
@@ -390,5 +406,8 @@ pub fn record_connection(database: &Path, arguments: &[String]) -> Result<()> {
 pub fn last_connection(data: &Path, browser: Browser, distribution: &Distribution) -> Option<i64> {
     let receipt: ConnectionReceipt =
         serde_json::from_slice(&std::fs::read(data.join("browser-connection.json")).ok()?).ok()?;
-    (receipt.extension_id == distribution.extension_id(browser)).then_some(receipt.time)
+    distribution
+        .extension_ids(browser)
+        .contains(&receipt.extension_id.as_str())
+        .then_some(receipt.time)
 }

@@ -12,7 +12,7 @@ Use Rivet’s name, screenshots and artwork consistently across listings and pac
 
 | Target | Publisher channel | Upload |
 | --- | --- | --- |
-| Chrome | [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole/) | `dist/rivet-chromium.zip` after release preparation |
+| Chrome | [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole/) | `dist/rivet-chrome-store.zip` produced with `--chrome-store` |
 | Edge | [Microsoft Partner Center](https://partner.microsoft.com/dashboard/microsoftedge/overview) | Chromium-compatible ZIP after Edge testing |
 | Firefox | [Mozilla Add-on Developer Hub](https://addons.mozilla.org/developers/) | Firefox package for review/signing; public listing or signed self-distribution |
 

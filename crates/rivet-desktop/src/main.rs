@@ -1,6 +1,7 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod browser;
 mod startup;
+mod transfer;
 mod view;
 mod widgets;
 use eframe::egui::{self, Color32};
@@ -148,6 +149,7 @@ enum Action {
     StartQueue,
     StopQueue,
     Properties,
+    Progress,
     Browser,
     SelectAll,
 }
@@ -165,6 +167,7 @@ struct App {
     engine: Engine,
     jobs: Vec<Job>,
     active: HashMap<String, Active>,
+    transfer_progress: HashMap<String, Progress>,
     selected: HashSet<String>,
     anchor: Option<usize>,
     tx: mpsc::Sender<(String, Option<String>)>,
@@ -184,6 +187,7 @@ struct App {
     show_browser: bool,
     browser_choice: usize,
     properties: Option<String>,
+    transfer: Option<transfer::TransferView>,
     url: String,
     output: String,
     expected_hash: String,
@@ -264,6 +268,7 @@ impl App {
             engine,
             jobs,
             active: HashMap::new(),
+            transfer_progress: HashMap::new(),
             selected: HashSet::new(),
             anchor: None,
             tx,
@@ -283,6 +288,7 @@ impl App {
             show_browser: false,
             browser_choice: 0,
             properties: None,
+            transfer: None,
             url: String::new(),
             output: String::new(),
             expected_hash: String::new(),
@@ -300,6 +306,8 @@ impl App {
                 self.jobs = jobs;
                 self.selected
                     .retain(|id| self.jobs.iter().any(|j| &j.id == id));
+                self.transfer_progress
+                    .retain(|id, _| self.jobs.iter().any(|j| &j.id == id));
             }
             Err(e) => self.message = e.to_string(),
         }
@@ -307,8 +315,14 @@ impl App {
     }
     fn tick(&mut self, ctx: &egui::Context) {
         while let Ok((id, error)) = self.rx.try_recv() {
+            let paused = self
+                .active
+                .get(&id)
+                .is_some_and(|a| a.cancel.is_cancelled());
             self.active.remove(&id);
-            if let Some(e) = error {
+            if let Some(e) = error
+                && !paused
+            {
                 self.message = e;
             }
             self.refresh();
@@ -353,6 +367,11 @@ impl App {
             last_bytes: 0,
             rate: 0.,
         };
+        if let Some(view) = self.transfer.as_mut().filter(|view| view.id == id) {
+            view.progress = active.progress.clone();
+        }
+        self.transfer_progress
+            .insert(id.clone(), active.progress.clone());
         let (cancel, progress, queue, engine, tx, task_id) = (
             active.cancel.clone(),
             active.progress.clone(),
@@ -430,6 +449,16 @@ impl App {
             Action::Properties => {
                 if let Some(id) = self.selected.iter().next() {
                     self.open_properties(id.clone());
+                }
+            }
+            Action::Progress => {
+                if let Some(id) = self
+                    .selected
+                    .iter()
+                    .find(|id| self.transfer_progress.contains_key(*id))
+                    .cloned()
+                {
+                    self.open_transfer(id);
                 }
             }
             Action::Browser => self.show_browser = true,

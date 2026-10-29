@@ -1,9 +1,11 @@
-/* Original Rivet source. No page scripts, cookie collection, analytics, or network service. */
+/* Rivet: optional isolated media controls; no cookies, analytics, or remote code. */
 "use strict";
 const api = globalThis.browser || globalThis.chrome;
 const HOST = "org.rivet.downloads";
 const mediaByTab = new Map();
 const MAX_PER_TAB = 50;
+const WIDGET_ID = "rivet-media-widget";
+let widgetUpdate = Promise.resolve();
 let enabledSites = new Set();
 const sitesReady = api.storage.local.get("enabledSites").then(value => {
   enabledSites = new Set(Array.isArray(value.enabledSites) ? value.enabledSites : []);
@@ -33,6 +35,37 @@ async function capture(url) {
 function announceConnection() {
   api.runtime.sendNativeMessage(HOST, {type: "ping"}).catch(() => {});
 }
+// Registered only for explicitly enabled origins with current host permission.
+function updateWidgetScripts() {
+  widgetUpdate = widgetUpdate.catch(() => {}).then(async () => {
+    await sitesReady;
+    const matches = [];
+    for (const origin of enabledSites) {
+      if (httpUrl(origin) && await api.permissions.contains({origins: [`${origin}/*`]})) matches.push(`${origin}/*`);
+    }
+    const existing = await api.scripting.getRegisteredContentScripts({ids: [WIDGET_ID]});
+    if (existing.length) await api.scripting.unregisterContentScripts({ids: [WIDGET_ID]});
+    if (matches.length) await api.scripting.registerContentScripts([{
+      id: WIDGET_ID, matches, js: ["media-widget.js"], runAt: "document_idle", allFrames: true,
+    }]);
+    // Update already-open pages too. Restricted browser pages simply reject injection.
+    const tabs = await api.tabs.query({});
+    await Promise.all(tabs.map(async tab => {
+      if (tab.id === undefined) return;
+      try { await api.tabs.sendMessage(tab.id, {type: "rivet-widget-refresh"}); } catch { /* No existing widget. */ }
+      if (httpUrl(tab.url) && enabledSites.has(new URL(tab.url).origin)) {
+        try { await api.scripting.executeScript({target: {tabId: tab.id, allFrames: true}, files: ["media-widget.js"]}); } catch { /* Browser-restricted page/frame. */ }
+      }
+    }));
+  });
+  return widgetUpdate;
+}
+async function widgetAllowed(sender) {
+  await sitesReady;
+  if (!sender.tab || !httpUrl(sender.url)) return false;
+  const origin = new URL(sender.url).origin;
+  return enabledSites.has(origin) && await api.permissions.contains({origins: [`${origin}/*`]});
+}
 api.runtime.onStartup.addListener(announceConnection);
 api.runtime.onInstalled.addListener(() => {
   announceConnection();
@@ -60,13 +93,18 @@ api.webRequest.onHeadersReceived.addListener(details => {
     if (!enabledSites.has(new URL(details.url).origin)) return;
     let items = mediaByTab.get(details.tabId);
     if (!items) mediaByTab.set(details.tabId, items = new Map());
-    if (items.size < MAX_PER_TAB || items.has(details.url)) items.set(details.url, {url: details.url, kind});
+    if (items.size < MAX_PER_TAB || items.has(details.url)) items.set(details.url, {url: details.url, kind, frameId: details.frameId || 0});
   }).catch(() => {});
 }, {urls: ["http://*/*", "https://*/*"]}, ["responseHeaders"]);
 
 api.tabs.onRemoved.addListener(tabId => mediaByTab.delete(tabId));
 api.tabs.onUpdated.addListener((tabId, change) => { if (change.status === "loading") mediaByTab.delete(tabId); });
-api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "widget-status") {
+    widgetAllowed(sender).then(enabled => sendResponse({enabled, items: enabled
+      ? [...(mediaByTab.get(sender.tab.id)?.values() || [])].filter(item => item.frameId === (sender.frameId || 0)) : []})).catch(() => sendResponse({enabled: false, items: []}));
+    return true;
+  }
   if (message?.type === "enable" || message?.type === "disable") {
     (async () => {
       await sitesReady;
@@ -82,6 +120,7 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
       }
       await api.storage.local.set({enabledSites: [...enabledSites]});
+      await updateWidgetScripts();
       sendResponse({ok: true});
     })().catch(() => sendResponse({ok: false, error: "Could not update site discovery."}));
     return true;
@@ -99,7 +138,10 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
   if (message?.type === "capture") {
-    capture(message.url).then(reply => sendResponse(reply), () => sendResponse({ok: false, error: "Could not reach Rivet. Check native-host registration and try again."}));
+    (async () => {
+      if (sender.tab && !await widgetAllowed(sender)) throw new Error("Site not enabled");
+      return capture(message.url);
+    })().then(reply => sendResponse(reply), () => sendResponse({ok: false, error: "Could not queue the link. Check site access and Rivet's native helper."}));
     return true;
   }
   if (message?.type === "clear") {
@@ -108,3 +150,5 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   return false;
 });
+api.permissions.onRemoved.addListener(() => { updateWidgetScripts().catch(() => {}); });
+sitesReady.then(updateWidgetScripts).catch(() => {});

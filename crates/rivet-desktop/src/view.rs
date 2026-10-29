@@ -81,6 +81,10 @@ impl App {
                         }
                     });
                     ui.menu_button("Help", |ui| {
+                        if ui.button("About Rivet…").clicked() {
+                            action = Some(Action::About);
+                            ui.close();
+                        }
                         if ui.button("Browser integration…").clicked() {
                             action = Some(Action::Browser);
                             ui.close();
@@ -692,6 +696,38 @@ impl App {
         self.properties_dialog(ctx);
         self.transfer_dialog(ctx);
         self.browser_dialog(ctx);
+        egui::Window::new("About Rivet")
+            .open(&mut self.show_about)
+            .resizable(false)
+            .collapsible(false)
+            .default_width(380.)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add(widgets::logo(64.));
+                    ui.vertical(|ui| {
+                        ui.heading("Rivet — Download Manager");
+                        ui.label(concat!("Installed version: ", env!("CARGO_PKG_VERSION")));
+                        ui.label(format!(
+                            "{} · {}",
+                            std::env::consts::OS,
+                            std::env::consts::ARCH
+                        ));
+                    });
+                });
+                ui.separator();
+                ui.label("MIT open source · No activation · No telemetry");
+                ui.hyperlink_to(
+                    "Release details",
+                    concat!(
+                        "https://github.com/Mfuon2/rivet/releases/tag/v",
+                        env!("CARGO_PKG_VERSION")
+                    ),
+                );
+                ui.hyperlink_to(
+                    "Download the latest release",
+                    "https://github.com/Mfuon2/rivet/releases/latest",
+                );
+            });
     }
 
     fn options(&mut self, ctx: &egui::Context) {

@@ -7,6 +7,10 @@ Support email: **MAINTAINER TO COMPLETE**
 Repository: https://github.com/Mfuon2/rivet
 Privacy policy: publish the reviewed PRIVACY.md content at a stable public URL.
 
+## Upload package
+
+For Chrome, run `python3 scripts/package_browser.py --chrome-store` and upload `dist/rivet-chrome-store.zip`. The standard development ZIP retains a fixed manifest `key`; it is not a Chrome Web Store upload package. Obtain the new store item ID and public key before updating the desktop/native-helper production allowlist and submitting the item for review.
+
 ## Description
 
 Rivet connects your browser to the open-source Rivet desktop download manager. Right-click a link or direct audio/video file to queue it locally. The popup lets you send a URL, check the native helper connection, and optionally enable direct-media discovery for a chosen site.

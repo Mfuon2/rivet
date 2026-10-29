@@ -93,3 +93,15 @@ Rivet’s host registration follows [Chrome](https://developer.chrome.com/docs/e
 `browser/distribution.json` contains the Chromium development ID, an optional distinct published Edge ID, Firefox ID and optional official installation URLs. Populate these from your publisher dashboards before release. Chrome’s public manifest key must match the store-issued ID; changing a development public key is not a substitute for publisher-account signing. `scripts/package_browser.py` checks the Chromium key/ID and Firefox ID before packaging. The public development key is not a private signing credential. See PUBLISHING.md.
 
 Default detection supports stable Chrome, Edge, Chromium and Firefox installations at standard locations. Safari, forks, custom app locations, custom profile roots and sandboxed distributions need separate integration work. OS-level registration/installation interactions are not yet validated on Windows/Linux. `RIVET_SETUP_ROOT` redirects the home-directory registration path for isolated macOS/Linux previews; Windows registry setup is deliberately disabled in isolated preview mode.
+
+## Chrome Web Store upload
+
+Build the dedicated upload ZIP:
+
+```sh
+python3 scripts/package_browser.py --chrome-store
+```
+
+Upload `dist/rivet-chrome-store.zip` to the Chrome Developer Dashboard. The regular `rivet-chromium.zip` is a development package and retains a `key` field; the store rejects that field in uploads. The dedicated upload excludes `key` and `update_url`, with `manifest.json` at the ZIP root and the same popup, scripts and icons.
+
+After creating the store item, obtain its extension ID and public key from the dashboard. Update the production native-host allowlist and distribution configuration, keep development identity aligned with the store public key, and rebuild/test the desktop packages before submitting for review. A successful ZIP upload is not store approval and does not yet make the store-assigned ID compatible with existing development installers.

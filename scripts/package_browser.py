@@ -1,4 +1,5 @@
 """Build original Rivet extension directories and ZIPs without installing them."""
+import argparse
 from pathlib import Path
 import base64
 import hashlib
@@ -6,6 +7,9 @@ import json
 import shutil
 import zipfile
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--chrome-store", action="store_true", help="Also create a Chrome Web Store upload ZIP without development-only manifest fields")
+args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 # Stable IDs let first launch register the native host without asking users to copy IDs.
 distribution = json.loads((root / "browser/distribution.json").read_text())
@@ -36,3 +40,22 @@ for browser in ("chromium", "firefox"):
                 entry.external_attr = 0o100644 << 16
                 archive.writestr(entry, source.read_bytes())
     print(output)
+
+if args.chrome_store:
+    output = root / "dist/chrome-store"
+    output.mkdir(parents=True, exist_ok=True)
+    store_manifest = dict(chromium)
+    store_manifest.pop("key", None)
+    store_manifest.pop("update_url", None)
+    # Use an allowlisted source directory so no local files or development metadata leak in.
+    with zipfile.ZipFile(root / "dist/rivet-chrome-store.zip", "w") as archive:
+        for source in sorted((root / "dist/chromium").rglob("*")):
+            if not source.is_file():
+                continue
+            name = source.relative_to(root / "dist/chromium").as_posix()
+            data = (json.dumps(store_manifest, indent=2) + "\n").encode() if name == "manifest.json" else source.read_bytes()
+            entry = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            entry.create_system = 3
+            entry.external_attr = 0o100644 << 16
+            archive.writestr(entry, data)
+    print(root / "dist/rivet-chrome-store.zip")

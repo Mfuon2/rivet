@@ -52,6 +52,23 @@ class ReleaseTests(unittest.TestCase):
         second = [(release.ROOT / f"dist/rivet-{browser}.zip").read_bytes() for browser in ("chromium", "firefox")]
         self.assertEqual(first, second)
 
+    def test_chrome_store_upload_omits_development_key_and_keeps_assets(self):
+        import json
+        import zipfile
+        subprocess.run([__import__("sys").executable, str(release.ROOT / "scripts/package_browser.py"), "--chrome-store"], check=True, stdout=subprocess.DEVNULL)
+        with zipfile.ZipFile(release.ROOT / "dist/rivet-chrome-store.zip") as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertNotIn("key", manifest)
+            self.assertNotIn("update_url", manifest)
+            self.assertEqual(manifest["manifest_version"], 3)
+            self.assertEqual(manifest["version"], "0.1.0")
+            for icon in manifest["icons"].values():
+                self.assertIn(icon, archive.namelist())
+            self.assertIn("background.js", archive.namelist())
+            self.assertIn("popup.html", archive.namelist())
+        development = json.loads((release.ROOT / "dist/chromium/manifest.json").read_text())
+        self.assertIn("key", development, "Store packaging must not change development identity")
+
     @unittest.skipUnless(shutil.which("minisign"), "Install Minisign for real cryptographic verification tests")
     def test_real_signature_verification_rejects_tampering_and_wrong_keys(self):
         private, public = self.folder / "temporary.key", self.folder / "temporary.pub"

@@ -78,7 +78,7 @@ baseline = measurements[0]["median_seconds"]
 for row in measurements:
     row["speedup_vs_single_connection"] = baseline / row["median_seconds"]
 result = {"fixture_bytes": len(data), "fixture_sha256": digest, "per_response_throttle": "64 KiB per 8 ms", "measurements": measurements,
-          "scope": "Local controlled per-response throttling. Not an Internet speed guarantee or an IDM benchmark.",
+          "scope": "Local controlled per-response throttling. Not an Internet speed guarantee.",
           "strategy": "Bounded dynamic scheduling over preplanned ranges; pooled HTTP connections. Mid-response segment splitting remains planned."}
 (root / args.report).write_text(json.dumps(result, indent=2) + "\n")
 print(json.dumps(result, indent=2))

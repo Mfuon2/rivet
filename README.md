@@ -2,96 +2,125 @@
 
 <img src="assets/branding/icons/icon-128.png" width="96" height="96" alt="Rivet logo">
 
-An open source download manager in Rust for Windows, macOS, and Linux. MIT licensed, with no activation system, subscription gate, telemetry, or embedded advertising.
+**An open-source desktop download manager for Windows, macOS, and Linux.**
 
-**Status: working foundation, not full IDM parity.** The HTTP engine, durable queue, native desktop UI, CLI, native messaging helper, and original browser extensions are implemented. Advanced media assembly, site grabbing, FTP, secure credential storage, and platform-specific integration are tracked in [the capability matrix](docs/CAPABILITIES.md). Windows/Linux are CI targets; local verification so far is on macOS ARM64.
+Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause and resume supported transfers, and send download links from your browser. It includes a desktop application, command-line tools, and Chromium/Firefox extensions.
 
-This is a new implementation with original source and branding. The REA investigation is a behavioral reference; proprietary program code, extensions, assets, and binaries are not part of this project or its build.
+[Downloads](https://github.com/Mfuon2/rivet/releases) · [Browser setup](docs/BROWSER.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md)
 
-## Build and run
+![Desktop preview](docs/desktop-preview.png)
 
-Rust 1.95 or newer, a C/C++ build toolchain, and CMake (the TLS dependency builds AWS-LC). Windows needs Visual Studio C++ Build Tools; Linux desktop builds also need X11/Wayland/OpenGL development packages listed in `.github/workflows/ci.yml`.
+## Features
+
+- HTTP/HTTPS downloads with up to 16 concurrent range connections.
+- Pause and resume when the server provides range support and a strong ETag.
+- SHA-256 verification, with an optional expected checksum.
+- Persistent queue and download history, one-time scheduling, and batch actions.
+- Compact desktop interface with categories, live progress, sortable/resizable columns, and light/dark themes.
+- Chrome, Edge, Chromium, and Firefox link handoff through a local native helper.
+- Optional media-link discovery for sites you explicitly enable.
+- CLI support for downloads, queue management, and HTTP/SOCKS proxy settings.
+
+Rivet has no activation, subscription gate, advertising, or telemetry.
+
+## Download and install
+
+Download the package matching your operating system and processor from [GitHub Releases](https://github.com/Mfuon2/rivet/releases).
+
+| Platform | Packages |
+| --- | --- |
+| Windows | Setup EXE or ZIP archive |
+| macOS | PKG installer or application archive |
+| Linux | DEB package or tarball |
+
+**Preview release:** some features and platform integrations are still in development. Linux packages are built on Ubuntu 24.04. Windows installers do not have Authenticode publisher signatures; macOS packages are not Developer ID-signed or notarized, so platform warnings may appear.
+
+Release checksums are signed with Minisign. Follow the [verification instructions](release/VERIFYING.md) before installing. The public verification key is in [release/minisign.pub](release/minisign.pub).
+
+## Getting started
+
+1. Install and open Rivet.
+2. Follow the default-browser setup screen, or continue to the download manager.
+3. Choose **Add URL**, enter a download address and destination filename, then add it to the queue.
+4. Select the entry and choose **Resume**, or choose **Start queue** to process queued downloads.
+
+Automatic queue processing is off at startup. **Stop** pauses selected active transfers; **Stop all** stops queue processing and pauses active transfers. Completed destination files are never overwritten.
+
+## Browser integration
+
+On startup, Rivet detects a supported default browser, prepares the extension files, and registers its native helper for the current user. Open **Browsers** in the toolbar to check or repeat setup.
+
+The current extension packages are development builds. Chrome/Edge/Chromium require **Developer mode → Load unpacked**. Firefox uses **Load Temporary Add-on**, which must be repeated after Firefox restarts. Store distribution is pending; Rivet does not bypass browser approval.
+
+After loading the extension, choose **Check connection** in its popup. Right-click a download link and select **Send link to Rivet**. Captured links appear in the desktop queue.
+
+See [browser setup](docs/BROWSER.md) for detailed instructions and troubleshooting.
+
+## Build from source
+
+Requirements: Rust 1.95 or newer, Python 3.11 or newer for packaging scripts, CMake, and a C/C++ toolchain. Windows builds need Visual Studio C++ Build Tools. Linux desktop builds also need the development libraries listed in [the CI workflow](.github/workflows/ci.yml).
 
 ```sh
+git clone https://github.com/Mfuon2/rivet.git
+cd rivet
 cargo build --workspace --locked
 cargo run -p rivet-desktop
 ```
 
-The desktop follows a compact download-manager layout: menu strip, Lucide action toolbar, category tree, resizable/sortable transfer table and selection details. Light is the default theme; View → Dark theme switches it. Column visibility/order, density and theme persist. Before the manager opens, Rivet detects the default supported browser, prepares its bundled extension and registers the native helper for the current user. Extension installation remains browser-controlled; development builds show the local loading steps. Open **Browsers** to recheck setup or configure additional browsers.
-
-The desktop app starts with automatic queue processing **off**. Add a URL and a complete output path, then click Start. Browser captures appear in the same queue. Pause retains validated range parts; resume is available as Retry / recover followed by Start. The destination's parent folder must exist. Completed files are never overwritten.
-
-```sh
-# Download now; Ctrl-C pauses. Repeating the command resumes when a strong ETag is available.
-cargo run -p rivet-cli --bin rivet -- get 'https://example.com/file.zip' -o /absolute/path/file.zip -c 4
-
-# Verify against a publisher-supplied SHA-256 (replace the placeholder).
-cargo run -p rivet-cli --bin rivet -- get URL -o OUTPUT --sha256 EXPECTED_HEX
-
-# Persist a job and process it later.
-cargo run -p rivet-cli --bin rivet -- add URL -o OUTPUT --delay-seconds 60
-cargo run -p rivet-cli --bin rivet -- list
-cargo run -p rivet-cli --bin rivet -- run
-
-# Process one due queued job, then exit.
-cargo run -p rivet-cli --bin rivet -- run --once
-```
-
-Use `--database /path/queue.sqlite3` for an isolated queue and `--proxy http://proxy:port` or `--proxy socks5h://proxy:port` for CLI transfers. System proxy environment variables also apply. `list` returns JSON containing source URLs, so do not publish its output if URLs contain access tokens. The GUI currently uses system proxy settings; an explicit proxy editor is planned.
-
-Set `RIVET_DATABASE` to an absolute path to share an alternate database across the desktop, CLI and native host (useful for development). An explicit CLI `--database` overrides it.
-
-`RIVET_DOWNLOAD_DIR` overrides the browser helper's download directory and must also be absolute.
-
-## Browser integration
-
-Read [browser setup](docs/BROWSER.md). Run `python3 scripts/package_browser.py` to produce Chromium and Firefox extension folders/ZIPs in `dist/`. Build `rivet-native-host` and register its generated manifest with your browser. Packaging does not install anything or change browser settings.
-
-The extension only sends URLs after an explicit user action. It does not copy browser cookies or passwords. Direct downloads requiring session cookies are not supported yet. Site media discovery requires a separate site permission. Detected links are held only in the browser worker's memory and may disappear when that worker sleeps. HLS/DASH URLs can be saved as playlist files; assembled video downloads are not implemented yet.
-
-## Transfer guarantees and limitations
-
-- HTTP/HTTPS, up to 16 concurrent ranges per transfer, redirects with HTTPS downgrade refusal, connection/read timeouts, and bounded range retries.
-- Segmentation/resume requires a known size, range support, and a **strong ETag**. Other resources use one stream and restart after interruption. Weak validators do not authorize splicing file representations.
-- Every ranged response must match its requested offsets, total size, final URL, and ETag. Encoded responses are refused to preserve byte offsets.
-- Parts live in `OUTPUT.rivet/`. A process lock prevents concurrent writes to the same output. Output publication uses a same-filesystem hard link, which fails rather than replaces an existing path. Filesystems without hard-link support are not supported for publication yet.
-- SHA-256 is calculated before publication. An optional expected digest must match. A mismatch retains partial data and leaves the destination absent.
-- SQLite leases coordinate CLI/GUI workers. A crashed worker can be recovered after its 30-second lease expires. Automatic recovery is not automatic startup of downloads: use Retry / recover.
-- SQLite is not encrypted. Job URLs and sidecar resume URLs can contain signed access tokens. Unix database/work-directory permissions are restricted; OS account access remains the security boundary. Credential storage in the OS keychain is planned before authenticated capture.
-- Complete parts are trusted according to their sizes and the server's strong ETag; local partial-file tamper detection and power-loss checkpoints are planned. An expected SHA-256 protects final integrity when available.
-- Single-stream transfers do not yet retry automatically. There is no global/per-host bandwidth budget yet.
-
-## Verify
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-python3 scripts/package_browser.py
-node --check browser/shared/background.js
-node --check browser/shared/popup.js
-node --test browser/tests/background.test.cjs
-python3 scripts/smoke.py
-```
-
-Transfer tests use local HTTP fixtures: exact segmented assembly, interruption/resume, changed ETag rejection, ignored ranges, absent validators, malformed ranges, compression refusal, short-read retries, and checksum failure. Queue/native tests cover ownership, scheduling, framing limits and filesystem-path isolation. A three-OS CI matrix is provided; it has not run on a remote service yet.
-
-Architecture and implementation stages: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Capability status: [docs/CAPABILITIES.md](docs/CAPABILITIES.md). Security design: [SECURITY.md](SECURITY.md).
-
-
-Icons: [Lucide](https://lucide.dev/guide/installation), vendored from `lucide-static` 1.64.0. See [third-party notices](crates/rivet-desktop/assets/lucide/LICENSE) and [asset provenance](crates/rivet-desktop/assets/lucide/PROVENANCE.md). SVGs are embedded locally in the desktop executable.
-
-## Source and release packages
-
-The application and all original browser extension sources live together at [Mfuon2/rivet](https://github.com/Mfuon2/rivet). `crates/` contains the Rust desktop app, engine, CLI and native helper. `browser/` contains the Chromium/Firefox extension code. No IDM binaries, extracted components or reverse-engineering artifacts are included in this repository.
-
-Build native release executables and a package on the target OS:
+Build optimized executables and a native package on the target OS:
 
 ```sh
 cargo build --release --workspace --locked
 python3 scripts/release.py package --installer
 ```
 
-The native packaging tools are Inno Setup 6 on Windows, Apple's `pkgbuild` on macOS and `dpkg-deb` on Debian/Ubuntu. The output includes an installable package plus an archive and browser extension ZIPs. These are development packages: Windows installers are unsigned, macOS app signatures are ad hoc (not Developer ID/notarized), and browser-store approval is pending. The manual **Build unsigned release packages** workflow builds each OS on its own runner and retains downloadable CI artifacts; it does not publish a release or access a private signing key.
+Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
 
-Free release authentication uses Minisign-signed SHA-256 checksums. See [release signing](release/README.md), [download verification](release/VERIFYING.md) and [publishing preparation](docs/PUBLISHING.md). The public release verification key is published in `release/minisign.pub`; the encrypted private key remains outside GitHub. SignPath application and store submission drafts are in [docs/publishing](docs/publishing/).
+## Command-line usage
+
+Download a file:
+
+```sh
+cargo run -p rivet-cli --bin rivet -- get 'https://example.com/file.zip' -o /absolute/path/file.zip -c 4
+```
+
+Add a queued job and process due jobs:
+
+```sh
+cargo run -p rivet-cli --bin rivet -- add 'https://example.com/file.zip' -o /absolute/path/file.zip
+cargo run -p rivet-cli --bin rivet -- run
+```
+
+Use `--help` for available commands. `--database` selects a queue database; `--proxy` configures a CLI proxy. `RIVET_DATABASE` and `RIVET_DOWNLOAD_DIR` accept absolute paths for an alternate shared database and browser download directory.
+
+## Current limitations
+
+- Segmented resume requires a known size, byte-range support, and a strong ETag. Other resources restart after interruption.
+- HLS/DASH assembly, session-cookie forwarding, automatic browser download takeover, FTP, site crawling, recurring schedules, and bandwidth budgets are not implemented.
+- Safari is not supported yet.
+- Destination filesystems must support hard links for final file publication.
+- Local queues and resume metadata are not encrypted and may contain access tokens from download URLs.
+- Automated builds/tests do not replace clean-machine installation and real-browser testing.
+
+See [capabilities](docs/CAPABILITIES.md) and the [roadmap](docs/ROADMAP.md) for implementation status.
+
+## Development
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+python3 -m unittest discover -s scripts/tests -v
+node --test browser/tests/background.test.cjs
+python3 scripts/smoke.py
+```
+
+The Rust application is in `crates/`, extension sources are in `browser/`, and packaging tools are in `scripts/` and `packaging/`. See [architecture](docs/ARCHITECTURE.md) for component details. Bug reports and pull requests are welcome through [GitHub](https://github.com/Mfuon2/rivet/issues).
+
+## Privacy and security
+
+Read the [privacy statement](PRIVACY.md) and [security design](SECURITY.md). Browser handoff does not forward cookies or passwords. Download requests go to the source servers selected by the user.
+
+## License
+
+Rivet is licensed under the [MIT License](LICENSE). Action and file icons use [Lucide](https://lucide.dev/) with the included [Lucide/Feather notices](crates/rivet-desktop/assets/lucide/LICENSE). The product logo is included in [assets/branding](assets/branding/).

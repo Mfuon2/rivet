@@ -68,7 +68,6 @@ impl App {
                     ui.small("Rivet extensions are development packages; store publication and signed installers are pending. Session-authenticated downloads, browser takeover and assembled HLS/DASH video are pending.");
                     ui.collapsing("Troubleshooting", |ui| {
                         ui.label("Host not found: check the manifest location, host name org.rivet.downloads and the browser profile/channel. Host failed to start: verify the absolute helper path and execute permissions. Access forbidden: match the allowlisted ID to this installed Rivet extension. Firefox needs allowed_extensions; Chromium browsers need allowed_origins.");
-                        ui.label("The IDM Integration Module connects to IDM. Install Rivet's own extension for Rivet.");
                         ui.label("Full per-OS instructions are in docs/BROWSER.md.");
                     });
                 });

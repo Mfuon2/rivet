@@ -164,9 +164,8 @@ impl App {
                                     action = Some(value);
                                 }
                             }
-                            widgets::tool(ui, "Grabber", Icon::Grabber, false).on_hover_text(
-                                "Website grabbing is planned; see the parity checklist.",
-                            );
+                            widgets::tool(ui, "Grabber", Icon::Grabber, false)
+                                .on_hover_text("Website grabbing is planned; see the roadmap.");
                             if widgets::tool(ui, "Browsers", Icon::Browser, true).clicked() {
                                 action = Some(Action::Browser);
                             }
@@ -683,7 +682,7 @@ impl App {
             for field in fields{ui.horizontal(|ui|{let mut visible=self.prefs.columns.contains(&field);let r=ui.add_enabled(field!=Field::Name,egui::Checkbox::new(&mut visible,field.label()));if r.changed(){if visible{self.prefs.columns.push(field);}else{self.prefs.columns.retain(|f|*f!=field);}}
                 if let Some(i)=self.prefs.columns.iter().position(|f|*f==field){if ui.add_enabled(i>0,egui::Button::new("↑")).clicked(){self.prefs.columns.swap(i,i-1);}
 if ui.add_enabled(i+1<self.prefs.columns.len(),egui::Button::new("↓")).clicked(){self.prefs.columns.swap(i,i+1);}}});}
-            ui.separator();ui.small("Preferences persist across restarts. Recurring schedules, bandwidth budgets and authenticated profiles remain on the parity roadmap.");
+            ui.separator();ui.small("Preferences persist across restarts. Recurring schedules, bandwidth budgets and authenticated profiles remain on the roadmap.");
         });
         self.show_options = open;
     }

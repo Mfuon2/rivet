@@ -6,7 +6,7 @@ Status: development builds only. No browser-store submission, OS publisher signi
 
 Choose the individual or organization that owns Rivet. Use the same identity in the source repository, download website, privacy policy, store listings and signing accounts. Set up a support email and an HTTPS website you control. Use passkeys/security keys or MFA for publisher, repository and domain accounts. Keep recovery access separately; never commit credentials, private signing keys, recovery codes or store API tokens.
 
-Rivet is an independent product. Use its own name, screenshots and icons. Do not submit the IDM extension, use Tonec’s publisher identity, or describe Rivet as an official IDM product. Preserve the MIT license and the Lucide/Feather notices in source and distributed packages.
+Use Rivet’s name, screenshots and artwork consistently across listings and packages. Preserve the MIT license and the Lucide/Feather notices in source and distributed packages.
 
 ## 2. Publish browser extensions through official channels
 

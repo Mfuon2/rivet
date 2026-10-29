@@ -241,7 +241,7 @@ def package(output, installer=False):
         shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", bundle / "LUCIDE-LICENSE")
         docs = bundle / "docs"
         docs.mkdir()
-        for name in ("BROWSER.md", "CAPABILITIES.md", "IDM-PARITY.md"):
+        for name in ("BROWSER.md", "CAPABILITIES.md", "ROADMAP.md"):
             shutil.copy2(ROOT / "docs" / name, docs / name)
         for browser in ("chromium", "firefox"):
             shutil.copytree(ROOT / "dist" / browser, bundle / "browser" / browser)

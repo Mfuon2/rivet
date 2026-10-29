@@ -37,6 +37,6 @@
       "speedup_vs_single_connection": 3.9275891086312407
     }
   ],
-  "scope": "Local controlled per-response throttling. Not an Internet speed guarantee or an IDM benchmark.",
+  "scope": "Local controlled per-response throttling. Not an Internet speed guarantee.",
   "strategy": "Bounded dynamic scheduling over preplanned ranges; pooled HTTP connections. Mid-response segment splitting remains planned."
 }

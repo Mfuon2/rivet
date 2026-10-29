@@ -6,7 +6,7 @@ The startup screen distinguishes local setup from confirmed browser contact. It 
 
 Chrome/Edge/Chromium development packages now share a fixed public manifest key and ID, so no extension-ID copying is needed. Earlier unpacked installs may need reloading after this change. Public-store IDs/URLs are not configured yet. Development builds therefore show a one-time local load step; browser approval is not bypassed. Firefox's temporary add-on is removed after Firefox restarts.
 
-Open **Rivet → Browsers** (or Help → Browser integration) for advanced or additional-browser setup. Rivet provides its own original extension. The IDM Integration Module linked on IDM’s site connects to IDM, not Rivet.
+Open **Rivet → Browsers** (or Help → Browser integration) for advanced or additional-browser setup. Rivet provides its own extension.
 
 Install in this order: desktop helper → extension → native-host registration → connection check → send a link. Store publication and guided installers remain pending. Safari requires a separate adapter and is not supported yet.
 
@@ -82,11 +82,11 @@ Discovery is limited to explicitly enabled media URL origins. Cross-origin CDN r
 
 - **Host not found:** confirm the browser/channel-specific manifest location and the exact host name `org.rivet.downloads`.
 - **Host failed to start:** confirm the executable exists, is executable on Unix, and has an absolute path. Rebuild the helper after updating Rivet.
-- **Access forbidden:** use the installed Rivet extension ID in `allowed_origins` (`chrome-extension://ID/`) or Firefox’s ID in `allowed_extensions`. Never use IDM’s ID.
+- **Access forbidden:** use the installed Rivet extension ID in `allowed_origins` (`chrome-extension://ID/`) or Firefox’s ID in `allowed_extensions`. Use the ID of your Rivet listing.
 - **Connected but no file starts:** captures enter the queue. Choose Resume for selected jobs, or Start queue to process due jobs.
 - **403 or login required:** cookie/session forwarding is not implemented; a connection check does not grant site authentication.
 
-Reference workflow: [IDM installation instructions](https://www.internetdownloadmanager.com/download.html), [IDM Integration Module](https://chromewebstore.google.com/detail/idm-integration-module/ngpampappnmepgilojfohadhhmbhlaek). Rivet’s host registration follows [Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging), [Edge](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging), and [Firefox](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging) documentation. Actual installed-browser end-to-end checks remain pending.
+Rivet’s host registration follows [Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging), [Edge](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging), and [Firefox](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging) documentation. Actual installed-browser end-to-end checks remain pending.
 
 ## Release identity configuration
 

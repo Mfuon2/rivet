@@ -1,6 +1,6 @@
 """End-to-end checks of Rivet binaries against an isolated local fixture.
 
-Runs only Rivet and a Python fixture server, never the inspected application.
+Runs Rivet and an isolated local HTTP fixture server.
 """
 import argparse
 import functools
@@ -60,8 +60,9 @@ with tempfile.TemporaryDirectory(prefix="rivet-smoke-") as temp:
         assert Path(browser_job["request"]["destination"]).parent == temp / "browser-downloads"
         assert not Path(browser_job["request"]["destination"]).exists()
         manifest = json.loads(cli("host-manifest", "--executable", str(host), "--extension-id", "a" * 32))
-        assert manifest["path"] == str(host) and manifest["name"] == "org.rivet.downloads"
-        result = {"cli_transfer": "passed", "durable_queue_worker": "passed", "native_host_framing_and_queue_only": "passed", "host_manifest": "passed", "fixture_sha256": digest, "all_network_traffic": "local HTTP fixture", "original_application_executed": False}
+        # Windows canonical paths may include the extended-length prefix; compare file identity.
+    assert Path(manifest["path"]).samefile(host) and manifest["name"] == "org.rivet.downloads"
+        result = {"cli_transfer": "passed", "durable_queue_worker": "passed", "native_host_framing_and_queue_only": "passed", "host_manifest": "passed", "fixture_sha256": digest, "all_network_traffic": "local HTTP fixture"}
     finally:
         server.shutdown()
         server.server_close()

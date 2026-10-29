@@ -14,7 +14,7 @@ Description: Rust download manager with HTTP/HTTPS range downloads, resume valid
 - Private security reporting contact: **MAINTAINER TO COMPLETE**.
 - Confirmation that governance and release review meet SignPath's current conditions: **NOT YET ASSESSED/APPROVED**.
 
-Source and packages contain Rivet's original implementation; the IDM installer, extracted components and reverse-engineering evidence are excluded from this repository. No proprietary executable or extension is included in the build.
+The project contains Rust application code, JavaScript browser extensions, product artwork and build scripts. Dependency and license review must accompany the application.
 
 The current workflow prepares unsigned Windows builds plus separately signed checksum support. It does not claim SignPath approval or use a SignPath certificate. If accepted, integrate the granted project/signing policy, verify the resulting Windows Authenticode signatures, and only then calculate/sign final release checksums.
 

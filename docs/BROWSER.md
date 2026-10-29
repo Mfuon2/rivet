@@ -1,18 +1,35 @@
 # Browser setup
 
-Rivet now checks the default HTTPS browser before showing the download manager. It locates its sibling native helper, prepares its bundled extension files in the app data directory, and registers its native host for the current user automatically. Matching manifest files are left untouched; missing or outdated Rivet registration is repaired. The work runs off the UI thread. Use **Browsers → Check and configure my default browser automatically** to repeat setup.
+Rivet detects the default HTTPS browser, checks known extension registrations without editing browser profiles, prepares its bundled extension files, and registers or repairs its native helper for the current user. Setup runs off the UI thread. Open **Browsers → Check and configure my default browser automatically** to repeat it, or choose another supported browser in the same dialog.
 
-The startup screen distinguishes local setup from confirmed browser contact. It cannot reliably prove that an extension is currently installed/enabled in every browser profile. An extension handshake records only its ID and time, not page URLs. Receipt history is not treated as proof of installation. Continuing to Rivet remembers the browser/extension identity; checks still run at the next launch, while an acknowledged successful local setup does not block opening the manager.
+## Automatic setup
 
-Chrome/Edge/Chromium development packages now share a fixed public manifest key and ID, so no extension-ID copying is needed. Earlier unpacked installs may need reloading after this change. Public-store IDs/URLs are not configured yet. Development builds therefore show a one-time local load step; browser approval is not bypassed. Firefox's temporary add-on is removed after Firefox restarts.
+1. Open Rivet. It prepares the desktop connection and distinguishes an installed, disabled, missing or unconfirmed extension.
+2. When the store listing is available, Rivet opens its installation page. On supported macOS/Windows Chromium browsers it also prepares a normal external-install request. Approve the extension in the browser; Rivet never approves permissions or uses enterprise force-install policies on your behalf. Linux and Firefox use their normal store installation pages.
+3. The extension opens its connection page on first installation and connects automatically. An installed extension also makes a lightweight local connection check once a minute. Rivet watches fresh connection receipts and marks setup complete without a manual Check connection step.
+4. Choose **Continue to Rivet** or **Restart Rivet**. A restart is normally unnecessary; the restart button is unavailable while transfers are active.
 
-Open **Rivet → Browsers** (or Help → Browser integration) for advanced or additional-browser setup. Rivet provides its own extension.
+If Rivet finds a disabled extension, it opens the browser's extensions page so you can enable it. Browser approval is still required. Missing files, unreadable/custom profiles and old receipt history are not reported as a verified current connection. Continuing before connection defers the guide for that browser; local helper checks still run, and **Browsers** can reopen setup.
 
-Install in this order: desktop helper → extension → native-host registration → connection check → send a link. Store publication and guided installers remain pending. Safari requires a separate adapter and is not supported yet.
+Rivet checks the known Chrome store item for public availability when an install URL has not yet been configured. An unpublished/error listing is not treated as installable. Firefox needs a Mozilla-signed add-on for permanent installation. Store approval is separate from GitHub releases.
 
-The native helper only queues URLs. Downloads start when you explicitly start them in Rivet or opt into automatic processing. It does not launch a shell or execute downloaded files.
+## GitHub ZIP fallback
 
-## Build
+When the store extension is unavailable or not found, setup offers **Download extension ZIP**, **Open GitHub releases**, **Open prepared extension folder**, and **Open extension installer**. The ZIP link matches the installed app's release and the selected browser. Rivet has already prepared the same bundled files locally, so you can proceed without manually extracting an archive.
+
+- Chrome, Edge and Chromium: enable Developer mode, choose **Load unpacked**, and select the prepared folder. Raw ZIP files cannot be installed directly. Use **Development setup** to copy the folder path if needed.
+- Firefox: choose **Load Temporary Add-on** and select the prepared `manifest.json`. Temporary add-ons disappear when Firefox restarts; restart Rivet rather than Firefox if you want to keep a temporary add-on loaded.
+- When updating an existing unpacked extension, use its browser-side **Reload** control after Rivet prepares the new files. Rivet does not edit the browser profile or bypass the browser's approval UI.
+
+The helper accepts Rivet's fixed development identity and its configured Chrome store identity. No terminal commands or extension-ID copying are required for packaged Rivet. Safari is not supported yet.
+
+Browser captures only queue URLs. Downloads start when you explicitly start them in Rivet or opt into automatic queue processing. The helper does not execute downloaded files or launch a shell.
+
+## Advanced source builds and custom identities
+
+The following commands are only for developers or custom extension identities; normal packaged setup performs helper registration automatically.
+
+### Build
 
 ```sh
 cargo build --release -p rivet-cli --bins
@@ -26,7 +43,7 @@ python3 scripts/package_browser.py
 | Chromium | Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, select `dist/chromium`. |
 | Firefox | Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, select `dist/firefox/manifest.json`. |
 
-Record the actual installed extension ID in each Chromium browser; IDs can differ across installations. Firefox’s development ID is `rivet@rivet.local`. Temporary Firefox add-ons disappear after a restart. Published distribution and Firefox signing are not configured. Chrome-family browsers such as Brave/Opera have additional host-location and distribution differences; they are not yet validated Rivet targets.
+The shipped unpacked Chromium package uses a fixed development ID. Only custom identities need manual allowlist configuration. Firefox’s development ID is `rivet@rivet.local`. Temporary Firefox add-ons disappear after a restart. Published distribution and Firefox signing are not configured. Chrome-family browsers such as Brave/Opera have additional host-location and distribution differences; they are not yet validated Rivet targets.
 
 Generate a native-host manifest using the **dedicated helper**, not the `rivet` CLI binary:
 
@@ -43,9 +60,9 @@ target/release/rivet host-manifest \
 
 On Windows, executable names end in `.exe`; use PowerShell redirection with UTF-8 output when saving JSON. The native manifest path is absolute and browser registration must point at that JSON file. The browser launches `rivet-native-host` directly and enforces the extension allowlist in the manifest. The helper uses the default Rivet database; custom CLI databases do not receive browser captures.
 
-## Register per user
+### Native registration reference
 
-These are manual setup steps, not actions performed by this repository:
+Rivet writes these per-user registrations automatically; they are listed here for troubleshooting:
 
 | Browser / OS | Manifest location or registration |
 | --- | --- |
@@ -66,7 +83,7 @@ Different browser packaging/sandbox distributions may use different registration
 
 ## Check and use
 
-Open the Rivet extension popup and click **Check connection**. A successful check sends only `{"type":"ping"}` to the helper and creates no job or download folder. It verifies helper connectivity, not whether a desktop window is open or whether a download site will accept a request. If you use a development `RIVET_DATABASE`, ensure the browser-launched helper and desktop resolve the same database; environment variables set only in a terminal are not automatically inherited by an already-running browser.
+The extension connects automatically. Its **Finish setup** page retries the connection, and **Check connection** remains available for troubleshooting. A successful check sends only `{"type":"ping"}` to the helper and creates no job or download folder. It verifies helper connectivity, not whether a desktop window is open or whether a download site will accept a request. If you use a development `RIVET_DATABASE`, ensure the browser-launched helper and desktop resolve the same database; environment variables set only in a terminal are not automatically inherited by an already-running browser.
 
  Right-click a link and choose Send link to Rivet, or use the popup. Files are queued under the user's Downloads/Rivet directory with generated filename prefixes.
 
@@ -80,7 +97,7 @@ Direct HTTP/HTTPS media sources can be queued, including sources hosted on a CDN
 
 After starting a queued download in Rivet, click its active row (or **Downloads → Download progress…**) to open the live segment popup. It shows actual byte ranges, downloaded bytes, segment states and total progress. **Pause** preserves partial data, **Resume download** continues when validated range resume is supported, and **Close** leaves the transfer running. A non-resumable server uses one stream and restarts on resume.
 
-No cookies or request credentials are forwarded in this version. HLS/DASH playlists are detected but not assembled. Browser-specific behavior has not yet been validated in a real installed browser session.
+No cookies or request credentials are forwarded in this version. HLS/DASH playlists are detected but not assembled. Installed Chrome integration has been exercised in a test profile with a real direct MP4 transfer; complete cross-browser/OS coverage remains separate.
 
 Discovery is limited to explicitly enabled media URL origins. Cross-origin CDN requests need their own grant; requesting and managing those grants from the page UI is planned. Enabled-site origins persist locally; captured URLs stay in worker memory only. The activeTab permission alone does not enable discovery.
 

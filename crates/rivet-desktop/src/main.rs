@@ -82,6 +82,7 @@ struct Preferences {
     columns: Vec<Field>,
     connections: u8,
     setup_browser: String,
+    browser_setup_deferred: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -102,6 +103,7 @@ impl Default for Preferences {
             ],
             connections: 4,
             setup_browser: String::new(),
+            browser_setup_deferred: false,
         }
     }
 }
@@ -262,7 +264,7 @@ impl App {
         };
         let (tx, rx) = mpsc::channel();
         Ok(Self {
-            startup: startup::Startup::new(false),
+            startup: startup::Startup::new(false, prefs.browser_setup_deferred),
             queue,
             runtime,
             engine,
@@ -682,11 +684,14 @@ fn theme(ctx: &egui::Context, dark: bool) {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        if self.startup.render(ui, &mut self.prefs) {
+        self.tick(&ctx);
+        if self
+            .startup
+            .render(ui, &mut self.prefs, self.active.is_empty())
+        {
             ctx.request_repaint_after(Duration::from_millis(200));
             return;
         }
-        self.tick(&ctx);
         self.render(ui);
         self.dialogs(&ctx);
         ctx.request_repaint_after(Duration::from_millis(200));

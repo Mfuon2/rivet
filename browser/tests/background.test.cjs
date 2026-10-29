@@ -4,13 +4,16 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const path = require("node:path");
 
-function fixture() {
+function fixture({alarmExists = true} = {}) {
   const events = {};
   const sent = [];
   const registered = [];
+  const opened = [];
+  const alarms = [];
   const event = name => ({addListener: callback => { events[name] = callback; }});
   const api = {
-    runtime: {onStartup: event("startup"), onInstalled: event("installed"), onMessage: event("message"), sendNativeMessage: async (host, payload) => { sent.push({host, payload}); return {ok: true, id: "queued-job"}; }},
+    runtime: {onStartup: event("startup"), onInstalled: event("installed"), onMessage: event("message"), getURL: name => "chrome-extension://rivet/" + name, sendNativeMessage: async (host, payload) => { sent.push({host, payload}); return {ok: true, id: "queued-job"}; }},
+    alarms: {get: async name => alarmExists ? {name} : undefined, create: async (name, options) => { alarms.push({name,options}); }, onAlarm: event("alarm")},
     storage: {local: {get: async () => ({}), set: async () => {}}},
     permissions: {contains: async () => true, onRemoved: event("permissionsRemoved")},
     scripting: {
@@ -21,11 +24,11 @@ function fixture() {
     },
     contextMenus: {removeAll: async () => {}, create: () => {}, onClicked: event("click")},
     webRequest: {onHeadersReceived: event("headers")},
-    tabs: {onRemoved: event("removed"), onUpdated: event("updated"), query: async () => [], sendMessage: async () => {}},
+    tabs: {onRemoved: event("removed"), onUpdated: event("updated"), query: async () => [], sendMessage: async () => {}, create: async item => { opened.push(item); }},
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../shared/background.js"), "utf8"), {browser: api, URL, console});
   const message = (payload, sender = {}) => new Promise(resolve => events.message(payload, sender, resolve));
-  return {events, sent, api, message, registered};
+  return {events, sent, api, message, registered, opened, alarms};
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -91,6 +94,30 @@ test("browser startup announces only a queue-free native connection", async () =
   assert.equal(f.sent.length, 1);
   assert.equal(JSON.stringify(f.sent[0].payload), '{"type":"ping"}');
   assert.equal((await f.message({type: "list", tabId: 7})).items.length, 0);
+  assert.equal(f.alarms[0].options.periodInMinutes, 1);
+});
+
+test("first install opens automatic connection setup, updates do not open another tab", async () => {
+  const f = fixture();
+  f.events.installed({reason: "install"}); await flush();
+  assert.equal(f.opened.length, 1);
+  assert.equal(f.opened[0].url, "chrome-extension://rivet/setup.html");
+  f.events.installed({reason: "update"}); await flush();
+  assert.equal(f.opened.length, 1);
+  f.events.alarm({name: "unrelated"}); await flush();
+  const before = f.sent.length;
+  f.events.alarm({name: "rivet-connection"}); await flush();
+  assert.equal(f.sent.length, before + 1);
+  assert.equal(JSON.stringify(f.sent.at(-1).payload), '{"type":"ping"}');
+});
+
+test("a discarded connection alarm is restored without opening an install tab", async () => {
+  const f = fixture({alarmExists: false}); await flush();
+  assert.equal(f.alarms.length, 1);
+  assert.equal(f.alarms[0].name, "rivet-connection");
+  assert.equal(f.sent.length, 1);
+  assert.equal(JSON.stringify(f.sent[0].payload), '{"type":"ping"}');
+  assert.equal(f.opened.length, 0);
 });
 
 test("widgets register only on enabled sites and disappear on disable", async () => {

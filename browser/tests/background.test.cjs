@@ -7,18 +7,25 @@ const path = require("node:path");
 function fixture() {
   const events = {};
   const sent = [];
+  const registered = [];
   const event = name => ({addListener: callback => { events[name] = callback; }});
   const api = {
     runtime: {onStartup: event("startup"), onInstalled: event("installed"), onMessage: event("message"), sendNativeMessage: async (host, payload) => { sent.push({host, payload}); return {ok: true, id: "queued-job"}; }},
     storage: {local: {get: async () => ({}), set: async () => {}}},
-    permissions: {contains: async () => true},
+    permissions: {contains: async () => true, onRemoved: event("permissionsRemoved")},
+    scripting: {
+      getRegisteredContentScripts: async () => registered,
+      unregisterContentScripts: async () => { registered.length = 0; },
+      registerContentScripts: async scripts => { registered.push(...scripts); },
+      executeScript: async () => {},
+    },
     contextMenus: {removeAll: async () => {}, create: () => {}, onClicked: event("click")},
     webRequest: {onHeadersReceived: event("headers")},
-    tabs: {onRemoved: event("removed"), onUpdated: event("updated")},
+    tabs: {onRemoved: event("removed"), onUpdated: event("updated"), query: async () => [], sendMessage: async () => {}},
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../shared/background.js"), "utf8"), {browser: api, URL, console});
-  const message = payload => new Promise(resolve => events.message(payload, {}, resolve));
-  return {events, sent, api, message};
+  const message = (payload, sender = {}) => new Promise(resolve => events.message(payload, sender, resolve));
+  return {events, sent, api, message, registered};
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -84,4 +91,37 @@ test("browser startup announces only a queue-free native connection", async () =
   assert.equal(f.sent.length, 1);
   assert.equal(JSON.stringify(f.sent[0].payload), '{"type":"ping"}');
   assert.equal((await f.message({type: "list", tabId: 7})).items.length, 0);
+});
+
+test("widgets register only on enabled sites and disappear on disable", async () => {
+  const f = fixture(); await flush();
+  assert.equal(f.registered.length, 0);
+  await f.message({type: "enable", origin: "https://media.example"});
+  assert.equal(f.registered.length, 1);
+  assert.equal(JSON.stringify(f.registered[0].matches), '["https://media.example/*"]');
+  assert.equal(JSON.stringify(f.registered[0].js), '["media-widget.js"]');
+  const sender = {tab: {id: 7}, frameId: 0, url: "https://media.example/watch"};
+  assert.equal((await f.message({type: "widget-status"}, sender)).enabled, true);
+  assert.equal((await f.message({type: "widget-status"}, {...sender, url: "https://other.example/"})).enabled, false);
+  await f.message({type: "disable", origin: "https://media.example"});
+  assert.equal(f.registered.length, 0);
+  assert.equal((await f.message({type: "widget-status"}, sender)).enabled, false);
+  assert.equal((await f.message({type: "capture", url: "https://media.example/video.mp4"}, sender)).ok, false);
+  assert.equal(f.sent.length, 0);
+});
+
+test("widget choices stay inside their frame and revoked permission stops handoff", async () => {
+  const f = fixture();
+  await f.message({type: "enable", origin: "https://media.example"});
+  const sender = {tab: {id: 7}, frameId: 2, url: "https://media.example/watch"};
+  for (const frameId of [0,2]) f.events.headers({tabId: 7, frameId, url: `https://media.example/${frameId}.mp4`, responseHeaders: []});
+  await flush();
+  const reply = await f.message({type: "widget-status"}, sender);
+  assert.equal(reply.items.length, 1);
+  assert.equal(reply.items[0].url, "https://media.example/2.mp4");
+  assert.equal((await f.message({type: "capture", url: reply.items[0].url}, sender)).ok, true);
+  f.api.permissions.contains = async () => false;
+  assert.equal((await f.message({type: "widget-status"}, sender)).enabled, false);
+  assert.equal((await f.message({type: "capture", url: reply.items[0].url}, sender)).ok, false);
+  assert.equal(f.sent.length, 1, "revoked permission cannot queue another URL");
 });

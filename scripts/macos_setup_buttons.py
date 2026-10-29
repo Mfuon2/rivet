@@ -65,12 +65,18 @@ case "ocr":
     print(String(data: try JSONSerialization.data(withJSONObject: rows), encoding: .utf8)!)
 case "press":
     let pid = Int32(args[2])!
+    NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
+    Thread.sleep(forTimeInterval: 0.3)
     let app = AXUIElementCreateApplication(pid)
     func find(_ node: AXUIElement, _ label: String, _ depth: Int = 0) -> AXUIElement? {
         if depth > 40 { return nil }
         for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
             var value: CFTypeRef?
-            if AXUIElementCopyAttributeValue(node, key as CFString, &value) == .success, let text = value as? String, text == label { return node }
+            if AXUIElementCopyAttributeValue(node, key as CFString, &value) == .success, let text = value as? String, text == label {
+                var role: CFTypeRef?
+                AXUIElementCopyAttributeValue(node, kAXRoleAttribute as CFString, &role)
+                if let role = role as? String, [kAXButtonRole, kAXCheckBoxRole, kAXRadioButtonRole].contains(role) { return node }
+            }
         }
         var value: CFTypeRef?
         if AXUIElementCopyAttributeValue(node, kAXChildrenAttribute as CFString, &value) == .success, let children = value as? [AXUIElement] {

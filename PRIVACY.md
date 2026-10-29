@@ -1,10 +1,14 @@
 # Rivet privacy statement
 
-Draft for the current implementation. Publisher contact: **to be configured before store submission**.
+Last updated: October 29, 2026.
+
+Publisher: Mfuon2, maintainer of Rivet. Contact: https://github.com/Mfuon2/rivet/issues.
 
 Rivet has no developer-operated telemetry, advertising service, activation service or required remote account. Downloads and browser integration are processed locally, except for requests to the servers the user chooses to download from.
 
 The browser extension passes a selected HTTP/HTTPS URL to the locally installed Rivet native helper after a user action. Optional media discovery observes URLs and response content types only for explicitly enabled origins. Detected links are held in browser-worker memory; enabled origins persist in browser local storage. No browser cookies or passwords are forwarded.
+
+On enabled sites, a bundled isolated content script inspects standard video/audio elements and their media source URLs to display a Rivet download button. A selected direct media URL can refer to a different host, such as a CDN. Media URLs are sent to the local helper only after the user chooses a download. The widget does not read unrelated page text or form fields and does not send page content to a developer-operated service. Revoking site access removes its controls.
 
 The desktop app stores source URLs, destination paths, download state, descriptions and checksums in a local SQLite database. Resume state can also contain source URLs. URLs may include private access tokens. A successful native-helper exchange stores the extension ID and time locally to support setup diagnostics. No diagnostic receipt contains a page URL or browser password.
 
@@ -12,4 +16,6 @@ Starting a download contacts its source server and may follow permitted redirect
 
 Removing an extension removes its browser storage according to the browser's behavior. Rivet queue/history and downloaded/partial files remain local until the user deletes them; uninstalling the app does not promise to delete those files. URLs copied from properties can include secret query parameters.
 
-This statement must be updated if future versions add authenticated capture, crash reporting, update requests or other data flows. Review it against the released code before publishing it as a store privacy policy.
+Rivet uses URL and media information only to provide the download features described here. Rivet does not sell this information, use it for advertising or creditworthiness decisions, or share it with unrelated services. Rivet's use and transfer of information obtained through Chrome APIs adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements.
+
+This policy will be updated if Rivet adds authenticated capture, crash reporting, update requests or other data flows.

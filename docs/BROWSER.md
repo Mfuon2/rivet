@@ -74,6 +74,12 @@ Registration and protocol references: [Chrome native messaging](https://develope
 
 Media discovery: open an HTTP/HTTPS site, click Enable for this site, grant the permission, reload the page and start playback. The popup lists detected media with access-token query parameters hidden from display. Links remain in worker memory only; service-worker suspension can clear them. Use Disable to remove the site grant and clear current detections.
 
+On enabled sites, playing a standard HTML video or audio element shows **Download with Rivet** beside the player. Open it and choose the file to queue. The widget also attaches to players added after page load and can be dismissed per player. Disabling the site or revoking its permission removes the widget. The `scripting` permission installs the bundled isolated content script only on enabled origins; no remote scripts are loaded.
+
+Direct HTTP/HTTPS media sources can be queued, including sources hosted on a CDN. Blob URLs are never sent to the desktop helper: the widget instead offers detected links from the same frame, if available. Those links may belong to another player, so the user chooses explicitly. HLS/DASH choices are labelled **Save playlist file**; they do not assemble a complete video. Protected media, closed shadow-root players, browser-owned pages and native full-screen video overlays are not supported. Frames require their own enabled origin when different from the page.
+
+After starting a queued download in Rivet, click its active row (or **Downloads → Download progress…**) to open the live segment popup. It shows actual byte ranges, downloaded bytes, segment states and total progress. **Pause** preserves partial data, **Resume download** continues when validated range resume is supported, and **Close** leaves the transfer running. A non-resumable server uses one stream and restarts on resume.
+
 No cookies or request credentials are forwarded in this version. HLS/DASH playlists are detected but not assembled. Browser-specific behavior has not yet been validated in a real installed browser session.
 
 Discovery is limited to explicitly enabled media URL origins. Cross-origin CDN requests need their own grant; requesting and managing those grants from the page UI is planned. Enabled-site origins persist locally; captured URLs stay in worker memory only. The activeTab permission alone does not enable discovery.
@@ -91,6 +97,8 @@ Rivet’s host registration follows [Chrome](https://developer.chrome.com/docs/e
 ## Release identity configuration
 
 `browser/distribution.json` contains the Chromium development ID, an optional distinct published Edge ID, Firefox ID and optional official installation URLs. Populate these from your publisher dashboards before release. Chrome’s public manifest key must match the store-issued ID; changing a development public key is not a substitute for publisher-account signing. `scripts/package_browser.py` checks the Chromium key/ID and Firefox ID before packaging. The public development key is not a private signing credential. See PUBLISHING.md.
+
+The separate `chrome_store_extension_id` records the publisher's draft Chrome item ID. Native-host registration accepts that ID alongside the development ID, and setup recognizes connections from either. The Chrome store upload omits the development manifest key. Store installation URLs remain unset until the listing is approved.
 
 Default detection supports stable Chrome, Edge, Chromium and Firefox installations at standard locations. Safari, forks, custom app locations, custom profile roots and sandboxed distributions need separate integration work. OS-level registration/installation interactions are not yet validated on Windows/Linux. `RIVET_SETUP_ROOT` redirects the home-directory registration path for isolated macOS/Linux previews; Windows registry setup is deliberately disabled in isolated preview mode.
 

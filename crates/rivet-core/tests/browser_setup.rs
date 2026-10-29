@@ -78,10 +78,13 @@ fn registration_repairs_itself_without_rewriting_correct_files() {
     let manifest: serde_json::Value = serde_json::from_slice(&first).unwrap();
     assert_eq!(
         manifest["allowed_origins"],
-        serde_json::json!([format!(
-            "chrome-extension://{}/",
-            distribution.chromium_extension_id
-        )])
+        serde_json::json!(
+            distribution
+                .extension_ids(Browser::Chrome)
+                .iter()
+                .map(|id| format!("chrome-extension://{id}/"))
+                .collect::<Vec<_>>()
+        )
     );
     assert!(manifest.get("allowed_extensions").is_none());
     std::fs::write(&path, b"broken json").unwrap();
@@ -141,6 +144,21 @@ fn prepared_packages_use_fixed_ids_and_connection_records_are_bounded() {
         serde_json::from_slice(&std::fs::read(chromium.join("manifest.json")).unwrap()).unwrap();
     assert!(chromium_manifest["key"].as_str().unwrap().len() > 100);
     assert!(firefox.join("background.js").is_file());
+    for folder in [&chromium, &firefox] {
+        assert_eq!(
+            std::fs::read(folder.join("media-widget.js")).unwrap(),
+            include_bytes!("../../../browser/shared/media-widget.js")
+        );
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(folder.join("manifest.json")).unwrap()).unwrap();
+        assert!(
+            manifest["permissions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p == "scripting")
+        );
+    }
     let db = dir.path().join("queue.sqlite3");
     setup::record_connection(&db, &["https://untrusted.example".into()]).unwrap();
     assert!(setup::last_connection(dir.path(), Browser::Chrome, &distribution).is_none());
@@ -156,4 +174,10 @@ fn prepared_packages_use_fixed_ids_and_connection_records_are_bounded() {
     assert!(setup::last_connection(dir.path(), Browser::Firefox, &distribution).is_none());
     let record = std::fs::read_to_string(dir.path().join("browser-connection.json")).unwrap();
     assert!(!record.contains("untrusted"));
+    let store_id = distribution.chrome_store_extension_id.as_deref().unwrap();
+    setup::record_connection(&db, &[format!("chrome-extension://{store_id}/")]).unwrap();
+    assert!(setup::last_connection(dir.path(), Browser::Chrome, &distribution).is_some());
+    assert!(setup::last_connection(dir.path(), Browser::Firefox, &distribution).is_none());
+    let record = std::fs::read_to_string(dir.path().join("browser-connection.json")).unwrap();
+    assert!(record.contains(store_id));
 }

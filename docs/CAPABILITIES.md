@@ -12,10 +12,12 @@ Implementation status describes the current source. It does not imply production
 | Persistent queue/history | SQLite jobs and completed hashes |
 | One-time delayed jobs | Implemented; recurring schedules planned |
 | Desktop UI | Compact menus, toolbar, categories, saved theme/density/columns |
+| Transfer popup | Live byte ranges, segment states/progress, pause/resume and retained session snapshots |
 | CLI | Downloads, queue management, proxy options and manifest generation |
 | Chromium/Firefox handoff | Extension sources, packages and native helper implemented; store distribution pending |
 | Default-browser setup | Detection, per-user helper registration and embedded package preparation |
 | Media URL discovery | Opt-in per-site discovery; detections held in worker memory |
+| In-page media widget | Standard HTML video/audio on enabled sites; explicit direct-file handoff, no protected-media bypass |
 | Authenticated browser downloads | Planned; cookies/passwords are not forwarded |
 | HLS/DASH assembly | Planned; current URLs can be saved as playlist files |
 | HTTP/SOCKS proxy | CLI and environment support; desktop proxy editor/PAC planned |

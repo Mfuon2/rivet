@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 mod browser;
+mod file_actions;
 mod startup;
 mod transfer;
 mod updater;
@@ -157,6 +158,12 @@ enum Action {
     Update,
     Browser,
     SelectAll,
+    OpenFile,
+    RevealFile,
+    CopyPath,
+    CopySource,
+    RenameFile,
+    TrashFile,
 }
 struct Active {
     cancel: CancellationToken,
@@ -166,6 +173,11 @@ struct Active {
     rate: f64,
 }
 struct App {
+    file_edit: Option<(String, String)>,
+    trash_confirm: Option<Vec<String>>,
+    file_busy: HashSet<String>,
+    file_tx: mpsc::Sender<(String, Result<String, String>)>,
+    file_rx: mpsc::Receiver<(String, Result<String, String>)>,
     _presence: std::fs::File,
     updater: updater::Updater,
     startup: startup::Startup,
@@ -271,7 +283,13 @@ impl App {
             Engine::new(None)?
         };
         let (tx, rx) = mpsc::channel();
+        let (file_tx, file_rx) = mpsc::channel();
         Ok(Self {
+            file_edit: None,
+            trash_confirm: None,
+            file_busy: HashSet::new(),
+            file_tx,
+            file_rx,
             _presence: presence,
             updater: updater::Updater::new(),
             startup: startup::Startup::new(false, prefs.browser_setup_deferred),
@@ -327,6 +345,11 @@ impl App {
         self.last_refresh = Instant::now();
     }
     fn tick(&mut self, ctx: &egui::Context) {
+        while let Ok((id, result)) = self.file_rx.try_recv() {
+            self.file_busy.remove(&id);
+            self.message = result.unwrap_or_else(|error| error);
+            self.refresh();
+        }
         while let Ok((id, error)) = self.rx.try_recv() {
             let paused = self
                 .active
@@ -409,8 +432,66 @@ impl App {
             ctx.request_repaint();
         });
     }
+    fn run_file_action(&mut self, id: String, operation: file_actions::Operation) {
+        if !self.file_busy.insert(id.clone()) {
+            return;
+        }
+        let queue = self.queue.clone();
+        let tx = self.file_tx.clone();
+        std::thread::spawn(move || {
+            let result =
+                file_actions::execute(&queue, &id, operation).map_err(|error| error.to_string());
+            let _ = tx.send((id, result));
+        });
+    }
     fn action(&mut self, action: Action, ctx: &egui::Context) {
         match action {
+            Action::OpenFile | Action::RevealFile => {
+                if let Some(id) = self.selected.iter().next().cloned() {
+                    self.run_file_action(
+                        id,
+                        if matches!(action, Action::OpenFile) {
+                            file_actions::Operation::Open
+                        } else {
+                            file_actions::Operation::Reveal
+                        },
+                    );
+                }
+            }
+            Action::CopyPath | Action::CopySource => {
+                if let Some(job) = self.jobs.iter().find(|job| self.selected.contains(&job.id)) {
+                    ctx.copy_text(if matches!(action, Action::CopyPath) {
+                        job.request.destination.display().to_string()
+                    } else {
+                        job.request.url.clone()
+                    });
+                    self.message = "Copied to clipboard.".into();
+                }
+            }
+            Action::RenameFile => {
+                if let Some(job) = self.jobs.iter().find(|job| {
+                    self.selected.contains(&job.id)
+                        && job.status == "complete"
+                        && !self.file_busy.contains(&job.id)
+                }) {
+                    self.file_edit = Some((job.id.clone(), filename(job)));
+                }
+            }
+            Action::TrashFile => {
+                let ids: Vec<_> = self
+                    .jobs
+                    .iter()
+                    .filter(|job| {
+                        self.selected.contains(&job.id)
+                            && job.status == "complete"
+                            && !self.file_busy.contains(&job.id)
+                    })
+                    .map(|job| job.id.clone())
+                    .collect();
+                if !ids.is_empty() {
+                    self.trash_confirm = Some(ids);
+                }
+            }
             Action::Add => self.show_add = true,
             Action::Resume => {
                 for id in self.selected.clone() {
@@ -798,6 +879,7 @@ impl eframe::App for App {
         }
         self.render(ui);
         self.dialogs(&ctx);
+        self.file_dialogs(&ctx);
         self.updater.render(&ctx, self.active.is_empty());
         ctx.request_repaint_after(Duration::from_millis(200));
     }

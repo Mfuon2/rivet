@@ -142,6 +142,8 @@ pub fn arguments(
         "--progress-template",
         "download:RIVET:%(progress.downloaded_bytes)s:%(progress.total_bytes)s:%(progress.total_bytes_estimate)s",
         "--print",
+        "before_dl:RIVET_TITLE:%(title)j",
+        "--print",
         "after_move:RIVET_FILE:%(filepath)s",
         "--format",
         "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/b[ext=mp4]/bv*+ba/b",
@@ -262,6 +264,7 @@ pub async fn download(
     });
     let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
     let mut output = None;
+    let mut title = None;
     loop {
         let line = tokio::select! {
             _=cancel.cancelled()=>{stop_tree(&mut child).await;errors.abort();progress.finish(TransferState::Paused);bail!("Media download paused; resume to continue available partial streams");},
@@ -272,6 +275,9 @@ pub async fn download(
         };
         if line.len() > 16384 {
             continue;
+        }
+        if let Some(value) = line.strip_prefix("RIVET_TITLE:") {
+            title = serde_json::from_str::<String>(value).ok();
         }
         if let Some(path) = line.strip_prefix("RIVET_FILE:") {
             output = Some(PathBuf::from(path));
@@ -342,10 +348,15 @@ pub async fn download(
         hash.update(&buffer[..n]);
     }
     drop(file);
-    // A hard-link atomically publishes without replacing an existing user file on the same filesystem.
-    tokio::fs::hard_link(&output, &request.destination)
-        .await
-        .context("Could not publish media file without overwriting the destination")?;
+    let title = title.context("The media resolver did not provide the video title")?;
+    let mut name = crate::filenames::safe_name(&title);
+    if name.to_ascii_lowercase().ends_with(".mp4") {
+        name.truncate(name.len() - 4);
+    }
+    while name.len() > 176 {
+        name.pop();
+    }
+    let destination = crate::filenames::publish(&output, parent, &format!("{name}.mp4"))?;
     progress.completed.store(metadata.len(), Ordering::Relaxed);
     progress.total.store(metadata.len(), Ordering::Relaxed);
     progress.finish(TransferState::Complete);
@@ -354,6 +365,6 @@ pub async fn download(
     Ok(DownloadResult {
         bytes: metadata.len(),
         sha256: format!("{:x}", hash.finalize()),
-        destination: request.destination,
+        destination,
     })
 }

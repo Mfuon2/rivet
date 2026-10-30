@@ -15,9 +15,18 @@ pub async fn run_job(
         queue.claim(id, &owner)?,
         "job is already active, completed, or scheduled for later"
     );
-    let request = queue.get(id)?.request;
+    let job = queue.get(id)?;
+    let request = job.request;
     let transfer_cancel = cancel.child_token();
-    let future = engine.download(request, transfer_cancel.clone(), progress.clone());
+    let future = async {
+        if job.media {
+            crate::media::download(request, transfer_cancel.clone(), progress.clone()).await
+        } else {
+            engine
+                .download(request, transfer_cancel.clone(), progress.clone())
+                .await
+        }
+    };
     tokio::pin!(future);
     let mut interval = tokio::time::interval(Duration::from_secs(5));
     let result = loop {

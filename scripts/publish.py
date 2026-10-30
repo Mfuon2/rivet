@@ -128,6 +128,12 @@ def inspect(directory, install=False):
                         needed = ("rivet.exe", "rivet-native-host.exe", "rivet-desktop.exe") if "-windows-" in path.name else ("rivet", "rivet-native-host", "rivet-desktop")
                         if not all(any(name.endswith("/" + binary) for name in names) for binary in needed):
                             raise ValueError("App archive is missing executables")
+                        media_suffix = ".exe" if "-windows-" in path.name else ""
+                        for tool in ("yt-dlp", "ffmpeg", "ffprobe", "qjs"):
+                            if not any(name.endswith("/media/" + tool + media_suffix) for name in names):
+                                raise ValueError("App archive is missing bundled media tool: " + tool)
+                        if not any(name.endswith(("/media/licenses/NOTICE.txt", "/Resources/media-licenses/NOTICE.txt")) for name in names):
+                            raise ValueError("Media dependency notices missing")
                         if "-macos-" in path.name:
                             app_folder = folder / "mac-app"
                             app_folder.mkdir(exist_ok=True)
@@ -144,6 +150,8 @@ def inspect(directory, install=False):
                                 raise ValueError("macOS bundle version/icon mismatch")
                             release.run(["codesign", "--verify", "--deep", "--strict", app])
                             release.run([app / "Contents/MacOS/rivet", "--version"], timeout=20)
+                            for tool, args in [("yt-dlp", ["--ignore-config", "--version"]), ("ffmpeg", ["-version"]), ("ffprobe", ["-version"]), ("qjs", ["-e", 'print("RIVET_JS_OK")'])]:
+                                release.run([app / "Contents/MacOS/media" / tool, *args], timeout=30)
             elif path.name.endswith(".tar.gz"):
                 with tarfile.open(path, "r:gz") as archive:
                     names = archive.getnames()
@@ -151,6 +159,9 @@ def inspect(directory, install=False):
                         name = next((name for name in names if name.endswith("/bin/" + binary)), None)
                         if not name or archive.extractfile(name).read(4) != b"\x7fELF":
                             raise ValueError("Linux archive executable missing/invalid")
+                    for tool in ("yt-dlp", "ffmpeg", "ffprobe", "qjs"):
+                        if not any(name.endswith("/bin/media/" + tool) for name in names):
+                            raise ValueError("Linux archive media tool missing: " + tool)
             elif path.suffix == ".exe":
                 if path.read_bytes()[:2] != b"MZ":
                     raise ValueError("Invalid Windows installer")
@@ -162,11 +173,15 @@ def inspect(directory, install=False):
                     release.run([destination / "bin/rivet.exe", "--version"], timeout=20)
                     if not (destination / "bin/rivet-native-host.exe").is_file():
                         raise ValueError("Installer did not include the native helper")
+                    for tool, args in [("yt-dlp", ["--ignore-config", "--version"]), ("ffmpeg", ["-version"]), ("ffprobe", ["-version"]), ("qjs", ["-e", 'print("RIVET_JS_OK")'])]:
+                        release.run([destination / "bin/media" / (tool + ".exe"), *args], timeout=30)
                     release.run([destination / "unins000.exe", "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], timeout=120)
             elif path.suffix == ".deb":
                 destination = folder / "deb"
                 release.run(["dpkg-deb", "--extract", path, destination])
                 release.run([destination / "opt/rivet/rivet", "--version"], timeout=20)
+                for tool, args in [("yt-dlp", ["--ignore-config", "--version"]), ("ffmpeg", ["-version"]), ("ffprobe", ["-version"]), ("qjs", ["-e", 'print("RIVET_JS_OK")'])]:
+                    release.run([destination / "opt/rivet/media" / tool, *args], timeout=30)
                 if not (destination / "usr/share/applications/org.rivet.downloads.desktop").is_file():
                     raise ValueError("Linux launcher missing")
                 if not (destination / "usr/share/icons/hicolor/256x256/apps/org.rivet.downloads.png").is_file():
@@ -176,6 +191,9 @@ def inspect(directory, install=False):
                 for name in ("rivet-desktop", "rivet-native-host", "rivet"):
                     if f"Rivet.app/Contents/MacOS/{name}" not in listing:
                         raise ValueError("macOS installer executable missing")
+                for tool in ("yt-dlp", "ffmpeg", "ffprobe", "qjs"):
+                    if f"Rivet.app/Contents/MacOS/media/{tool}" not in listing:
+                        raise ValueError("macOS installer media tool missing")
                 if "Rivet.app/Contents/Resources/Rivet.icns" not in listing:
                     raise ValueError("macOS application icon missing")
     print("Native package and browser payload checks passed")

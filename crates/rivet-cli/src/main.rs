@@ -213,10 +213,12 @@ fn absolute(path: PathBuf) -> Result<PathBuf> {
 
 fn serve_host(database: PathBuf) -> Result<()> {
     let downloads = native::default_download_dir()?;
-    native::serve(
+    native::serve_with_actions(
         &mut std::io::stdin().lock(),
         &mut std::io::stdout().lock(),
-        &Queue::open(database)?,
+        &Queue::open(&database)?,
         &downloads,
+        || {},
+        || rivet_core::desktop::ensure_running(&database),
     )
 }

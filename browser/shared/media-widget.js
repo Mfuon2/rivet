@@ -4,6 +4,7 @@
   const api = globalThis.browser || globalThis.chrome;
   const KEY = "__rivetMediaWidget";
   if (globalThis[KEY]) { globalThis[KEY].refresh(); return; }
+  document.querySelectorAll("[data-rivet-media-widget]").forEach(stale => stale.remove());
   const widgets = new Map();
   const dismissed = new WeakSet();
   const protectedMedia = new WeakSet();
@@ -36,6 +37,24 @@
   async function choose(media, panel, status) {
     panel.replaceChildren();
     if (media.mediaKeys || protectedMedia.has(media)) { status.textContent = "Protected media is not supported."; return; }
+    const page=new URL(location.href);
+    const youtube=["youtube.com","www.youtube.com","m.youtube.com","music.youtube.com"].includes(page.hostname) && (page.pathname==="/watch" || /^\/(shorts|embed|live)\//.test(page.pathname));
+    if(youtube) {
+      const reply=await api.runtime.sendMessage({type:"widget-status"});
+      if(!reply?.enabled){teardown();return;}
+      const button=document.createElement("button");button.type="button";button.textContent="Download video with audio · MP4";
+      button.addEventListener("click",async event=>{
+        if(!event.isTrusted)return;event.stopPropagation();button.disabled=true;
+        status.textContent="Starting the video download in Rivet…";
+        try {
+          const result=await api.runtime.sendMessage({type:"download-page"});
+          status.textContent=result?.ok ? "Download requested. Rivet opens automatically; follow progress in the desktop app." : result?.error||"Update and open Rivet to enable video downloads.";
+        } catch {status.textContent="Update Rivet and reload this extension to enable video downloads.";}
+        finally {button.disabled=false;}
+      });
+      panel.append(button);status.textContent="Rivet resolves the public video, downloads video and audio, and merges a complete MP4. Protected or sign-in-only videos are not supported.";
+      return;
+    }
     const source = directUrl(media.currentSrc || media.src);
     const reply = await api.runtime.sendMessage({type: "widget-status"});
     if (!reply?.enabled) { teardown(); return; }
@@ -44,7 +63,7 @@
       status.textContent = "No direct file link found. Blob players and protected streams may not expose a downloadable file.";
       return;
     }
-    status.textContent = source ? "Send this file to your local Rivet queue." : "Choose a detected link. It may belong to another player in this frame.";
+    status.textContent = source ? "Download this file in Rivet." : "Choose a detected link. It may belong to another player in this frame.";
     for (const item of candidates.slice(0, 50)) {
       const url = directUrl(item.url);
       if (!url) continue;
@@ -53,15 +72,15 @@
       const parsed = new URL(url);
       const isPlaylist = item.kind === "playlist" || playlist(url);
       row.textContent = `${isPlaylist ? "Save playlist file" : "Download with Rivet"} · ${parsed.hostname}${parsed.pathname}`;
-      row.title = isPlaylist ? "Saves the playlist text only; complete HLS/DASH assembly is not supported." : "Queues this file in the desktop app; start it in Rivet.";
+      row.title = isPlaylist ? "Saves the playlist text only; complete HLS/DASH assembly is not supported." : "Starts this file in the desktop app.";
       row.addEventListener("click", async event => {
         if (!event.isTrusted) return;
         event.stopPropagation();
         row.disabled = true;
         status.textContent = "Sending to Rivet…";
         try {
-          const response = await api.runtime.sendMessage({type: "capture", url});
-          status.textContent = response?.ok ? "Queued in Rivet. Open the desktop app to start the download." : response?.error || "Open Rivet and check the extension connection.";
+          const response = await api.runtime.sendMessage({type: "download-file", url});
+          status.textContent = response?.ok ? "Download requested. Rivet opens automatically; follow progress in the desktop app." : response?.error || "Open Rivet and check the extension connection.";
         } catch { status.textContent = "Rivet is unavailable. Check the desktop helper connection."; }
         finally { row.disabled = false; }
       });

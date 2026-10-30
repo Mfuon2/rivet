@@ -6,6 +6,7 @@
   <section class="connection"><h2>Desktop connection</h2><p>Open Rivet to connect automatically.</p><button id="setup" type="button">Finish setup</button> <button id="check" type="button">Check connection</button><p id="connection-status" role="status"></p><details><summary>Setup and troubleshooting</summary><p>Install and open the Rivet desktop app. It prepares the browser connection automatically. If needed, open Rivet → Browsers to repair setup. Restart your browser only if the connection still does not appear.</p></details></section>
   <form id="capture"><label for="url">Send a download link</label><input id="url" type="url" placeholder="https://…" required><button>Queue in Rivet</button></form>
   <section><h2>Media on this page</h2><p>Enable this site to discover media and show a Download with Rivet button beside playing video or audio.</p>
+  <button id="download-page" type="button" hidden>Download this video as MP4</button>
   <div class="actions"><button id="enable" type="button">Enable for this site</button><button id="disable" type="button">Disable</button></div>
   <div id="media"></div><button id="refresh" type="button">Refresh detected media</button>
   <p class="note">Direct media files are supported. HLS/DASH playlist assembly is planned; sending one currently saves its playlist file.</p></section>

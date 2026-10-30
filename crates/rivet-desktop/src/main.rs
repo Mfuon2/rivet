@@ -166,6 +166,7 @@ struct Active {
     rate: f64,
 }
 struct App {
+    _presence: std::fs::File,
     updater: updater::Updater,
     startup: startup::Startup,
     queue: Queue,
@@ -262,6 +263,7 @@ impl App {
         install_fonts(&cc.egui_ctx);
         theme(&cc.egui_ctx, prefs.dark);
         let queue = Queue::open(Queue::default_path()?)?;
+        let presence = rivet_core::desktop::presence(&Queue::default_path()?)?;
         let jobs = queue.list()?;
         let runtime = tokio::runtime::Runtime::new()?;
         let engine = {
@@ -270,6 +272,7 @@ impl App {
         };
         let (tx, rx) = mpsc::channel();
         Ok(Self {
+            _presence: presence,
             updater: updater::Updater::new(),
             startup: startup::Startup::new(false, prefs.browser_setup_deferred),
             queue,
@@ -354,12 +357,18 @@ impl App {
         if self.last_refresh.elapsed() > Duration::from_secs(1) {
             self.refresh();
         }
-        if self.auto_start
-            && self.active.is_empty()
-            && self.last_queue_scan.elapsed() > Duration::from_millis(500)
-        {
+        if self.active.is_empty() && self.last_queue_scan.elapsed() > Duration::from_millis(500) {
             self.last_queue_scan = Instant::now();
-            match self.queue.next_queued() {
+            let next = if self.auto_start {
+                self.queue.next_queued()
+            } else {
+                Ok(self
+                    .jobs
+                    .iter()
+                    .find(|j| j.start_requested && j.status == "queued")
+                    .map(|j| j.id.clone()))
+            };
+            match next {
                 Ok(Some(id)) => self.start(id, ctx.clone()),
                 Err(e) => self.message = e.to_string(),
                 _ => {}
@@ -431,6 +440,7 @@ impl App {
             }
             Action::StopAll | Action::StopQueue => {
                 self.auto_start = false;
+                let _ = self.queue.clear_start_requests();
                 for a in self.active.values() {
                     a.cancel.cancel();
                 }

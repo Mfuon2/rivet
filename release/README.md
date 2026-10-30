@@ -24,6 +24,8 @@ Each platform runs Python packaging/signature tests, Rust formatting/lints/tests
 - Linux x64: a DEB and tarball built on Ubuntu 24.04; the DEB is extracted and its CLI, launcher and icon checked.
 - Chromium and Firefox development ZIPs plus a separate Chrome Web Store upload ZIP.
 
+Each app also contains pinned yt-dlp, QuickJS-NG and a minimal FFmpeg/FFprobe build. The media preparation step verifies upstream checksums, compiles FFmpeg from unmodified LGPL source, exercises a real video/audio mux, and includes source archives, license notices and build configuration. Windows media builds require MSYS2 Make and Visual Studio C++ tools; MSYS2 supplies the configure shell. Package inspection runs the installed media tools.
+
 All platform jobs must succeed before publication. Collection requires every supported platform and rejects missing or conflicting packages. Browser ZIPs use normalized metadata so duplicate cross-platform outputs have identical bytes.
 
 ## Signing and publication
@@ -46,6 +48,7 @@ For a local build:
 
 ```sh
 cargo build --release --workspace --locked
+python3 scripts/prepare_media_tools.py
 python3 scripts/release.py package --installer
 ```
 

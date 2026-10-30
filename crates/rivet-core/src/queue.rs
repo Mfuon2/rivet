@@ -16,6 +16,8 @@ pub struct Queue {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Job {
+    pub media: bool,
+    pub start_requested: bool,
     pub id: String,
     pub request: DownloadRequest,
     pub status: String,
@@ -81,6 +83,8 @@ impl Queue {
         let transaction =
             conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         for (name, declaration) in [
+            ("media", "INTEGER NOT NULL DEFAULT 0"),
+            ("start_requested", "INTEGER NOT NULL DEFAULT 0"),
             ("last_try", "INTEGER NOT NULL DEFAULT 0"),
             ("total_bytes", "INTEGER NOT NULL DEFAULT 0"),
             ("category", "TEXT NOT NULL DEFAULT 'auto'"),
@@ -126,10 +130,30 @@ impl Queue {
         )?;
         Ok(id)
     }
+    pub fn enqueue_media(&self, request: DownloadRequest) -> Result<String> {
+        request.validate()?;
+        crate::media::youtube_page(&request.url)?;
+        let id = uuid::Uuid::new_v4().to_string();
+        self.connect()?.execute("INSERT INTO jobs(id,request,status,created,not_before,media,category,start_requested) VALUES(?1,?2,'queued',?3,0,1,'Video',1)",params![id,serde_json::to_string(&request)?,now()])?;
+        Ok(id)
+    }
+    pub fn enqueue_download(&self, request: DownloadRequest) -> Result<String> {
+        request.validate()?;
+        let id = uuid::Uuid::new_v4().to_string();
+        self.connect()?.execute("INSERT INTO jobs(id,request,status,created,not_before,start_requested) VALUES(?1,?2,'queued',?3,0,1)",params![id,serde_json::to_string(&request)?,now()])?;
+        Ok(id)
+    }
+    pub fn clear_start_requests(&self) -> Result<()> {
+        self.connect()?.execute(
+            "UPDATE jobs SET start_requested=0 WHERE status='queued'",
+            [],
+        )?;
+        Ok(())
+    }
     pub fn list(&self) -> Result<Vec<Job>> {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
-            "SELECT id,request,status,bytes,sha256,error,not_before,created,last_try,total_bytes,category,description FROM jobs ORDER BY created,rowid",
+            "SELECT id,request,status,bytes,sha256,error,not_before,created,last_try,total_bytes,category,description,media,start_requested FROM jobs ORDER BY created,rowid",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((
@@ -145,6 +169,8 @@ impl Queue {
                 row.get::<_, i64>(9)?,
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
+                row.get::<_, bool>(12)?,
+                row.get::<_, bool>(13)?,
             ))
         })?;
         let mut jobs = Vec::new();
@@ -162,8 +188,12 @@ impl Queue {
                 total_bytes,
                 category,
                 description,
+                media,
+                start_requested,
             ) = row?;
             jobs.push(Job {
+                media,
+                start_requested,
                 id,
                 request: serde_json::from_str(&request)?,
                 status,
@@ -188,7 +218,7 @@ impl Queue {
     }
     /// Atomic lease prevents two workers from starting the same job. Expired jobs can be recovered.
     pub fn claim(&self, id: &str, owner: &str) -> Result<bool> {
-        Ok(self.connect()?.execute("UPDATE jobs SET status='running',owner=?2,lease=?3,error=NULL,last_try=?4 WHERE id=?1 AND not_before<=?4 AND (status IN ('queued','paused','failed') OR (status='running' AND lease<?4))",
+        Ok(self.connect()?.execute("UPDATE jobs SET status='running',start_requested=0,owner=?2,lease=?3,error=NULL,last_try=?4 WHERE id=?1 AND not_before<=?4 AND (status IN ('queued','paused','failed') OR (status='running' AND lease<?4))",
             params![id, owner, now() + 30, now()])? == 1)
     }
     pub fn heartbeat(&self, id: &str, owner: &str, bytes: u64, total_bytes: u64) -> Result<()> {

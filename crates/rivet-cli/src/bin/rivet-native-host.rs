@@ -12,7 +12,7 @@ fn run() -> Result<()> {
     let downloads = native::default_download_dir()?;
     let database = Queue::default_path()?;
     let arguments: Vec<_> = std::env::args().skip(1).collect();
-    native::serve_with_observer(
+    native::serve_with_actions(
         &mut std::io::stdin().lock(),
         &mut std::io::stdout().lock(),
         &Queue::open(&database)?,
@@ -20,6 +20,7 @@ fn run() -> Result<()> {
         || {
             let _ = browser_setup::record_connection(&database, &arguments);
         },
+        || rivet_core::desktop::ensure_running(&database),
     )?;
     Ok(())
 }

@@ -70,7 +70,7 @@ impl App {
                     .num_columns(2)
                     .spacing([24., 7.])
                     .show(ui, |ui| {
-                        ui.label("File size");
+                        ui.label(if job.media { "Current stream size" } else { "File size" });
                         ui.strong(if total > 0 || snapshot.state == TransferState::Complete {
                             widgets::bytes(total)
                         } else {
@@ -91,7 +91,9 @@ impl App {
                         });
                         ui.end_row();
                         ui.label("Resume capability");
-                        ui.label(if snapshot.segments.is_empty() {
+                        ui.label(if job.media {
+                            "Retained partial streams when available"
+                        } else if snapshot.segments.is_empty() {
                             "Checking server…"
                         } else if snapshot.resumable {
                             "Supported — validated byte ranges"
@@ -161,6 +163,10 @@ impl App {
                             )
                         })
                         .count();
+                    if job.media {
+                        ui.strong("Video and audio streams");
+                        ui.label("Resolving the public video, downloading each stream, then merging into one MP4. Counters show the current stream; a second stream starts its own counter.");
+                    } else {
                     ui.strong(format!(
                         "{} segments · {} active · up to {} connections",
                         snapshot.segments.len(),
@@ -219,6 +225,7 @@ impl App {
                             });
                     }
                 }
+                    }
                 if let Some(error) = &job.error
                     && job.status == "failed"
                 {

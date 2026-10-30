@@ -1,10 +1,10 @@
 # Rivet privacy statement
 
-Last updated: October 29, 2026.
+Last updated: October 30, 2026.
 
 Publisher: Mfuon2, maintainer of Rivet. Contact: https://github.com/Mfuon2/rivet/issues.
 
-Rivet has no developer-operated telemetry, advertising service, activation service or required remote account. Download management and browser integration are processed locally. Network requests are made to the selected download servers and, during extension setup, the official store or GitHub release pages described below.
+Rivet has no developer-operated telemetry, advertising service, activation service or required remote account. Download management and browser integration are processed locally. Network requests are made to the selected download servers and, during extension setup and update checks, the official store or GitHub release services described below.
 
 The browser extension passes a selected HTTP/HTTPS URL to the locally installed Rivet native helper after a user action. Optional media discovery observes URLs and response content types only for explicitly enabled origins. Detected links are held in browser-worker memory; enabled origins persist in browser local storage. No browser cookies or passwords are forwarded.
 
@@ -22,4 +22,6 @@ Removing an extension removes its browser storage according to the browser's beh
 
 Rivet uses URL and media information only to provide the download features described here. Rivet does not sell this information, use it for advertising or creditworthiness decisions, or share it with unrelated services. Rivet's use and transfer of information obtained through Chrome APIs adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements.
 
-This policy will be updated if Rivet adds authenticated capture, crash reporting, update requests or other data flows.
+At every normal desktop startup, Rivet requests public release metadata from GitHub. The request identifies the Rivet build version through its User-Agent and sends normal HTTP connection information. It does not send browsing history, download URLs, queue contents or account credentials. If you approve a download, Rivet retrieves release checksums, their signature and the matching application package from GitHub and its release CDN. These requests follow GitHub's privacy policy. No update is installed without your confirmation. Downloaded packages and a local installation outcome are stored in the user's update cache.
+
+This policy will be updated if Rivet adds authenticated capture, crash reporting or other data flows.

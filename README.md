@@ -7,6 +7,7 @@
 Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause and resume supported transfers, and send download links from your browser. It includes a desktop application, command-line tools, and Chromium/Firefox extensions.
 
 [![Release and publish](https://github.com/Mfuon2/rivet/actions/workflows/release.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/release.yml)
+[![Rust, browser, packaging and smoke tests](https://github.com/Mfuon2/rivet/actions/workflows/ci.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/ci.yml)
 
 [Downloads](https://github.com/Mfuon2/rivet/releases) · [Browser setup](docs/BROWSER.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md)
 
@@ -23,6 +24,7 @@ Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause a
 - Chrome, Edge, Chromium, and Firefox link handoff through a local native helper.
 - Optional media-link discovery and an in-page download widget for sites you explicitly enable.
 - CLI support for downloads, queue management, and HTTP/SOCKS proxy settings.
+- Startup update checks, verified downloads, and complete application updates with restart.
 
 Rivet has no activation, subscription gate, advertising, or telemetry.
 
@@ -39,6 +41,18 @@ Download the package matching your operating system and processor from [GitHub R
 **Preview release:** some features and platform integrations are still in development. Linux packages are built on Ubuntu 24.04. Windows installers do not have Authenticode publisher signatures; macOS packages are not Developer ID-signed or notarized, so platform warnings may appear.
 
 Release checksums are signed with Minisign. Follow the [verification instructions](release/VERIFYING.md) before installing. The public verification key is in [release/minisign.pub](release/minisign.pub).
+
+## Application updates
+
+Rivet checks GitHub for a newer published version in the background whenever it starts. Current preview releases are included. When an update is available, choose **Download update**, then **Install and restart**. You can postpone it or cancel the download. **Help → Check for updates** opens the checker again.
+
+The app verifies the release's Minisign signature with its embedded public key, then verifies the package checksum before installing. It checks the package again in a detached updater after the running app exits. Updates replace the desktop app, CLI, download engine, native helper and bundled browser files together. Queue/history, settings, downloads and partial files remain in their existing data folders. Pause active downloads before installing.
+
+Standard Windows installations update in place using the installer. On macOS, `/Applications/Rivet.app` is replaced as a complete bundle, with the previous bundle retained for rollback; protected installations use the PKG installer and may request administrator approval. Linux DEB installations use the system installer with administrator approval; extracted Linux portable archives update their whole application folder. Development builds, custom Mac locations and unsupported architectures offer a GitHub download link instead of replacing an unknown installation.
+
+Store-managed browser extensions continue to update through their browser stores. Rivet refreshes its bundled development extension files and native helper registration on startup; an unpacked extension already loaded by the browser may need **Reload** in the browser's extensions page.
+
+Offline checks never block app startup. Update requests contact GitHub and its release CDN; see [Privacy](PRIVACY.md). CI checks Rust, browser behavior, packaging/signatures and actual executables on Windows, Linux and macOS; the release workflow also builds, inspects, signs, uploads and verifies release packages.
 
 ## Getting started
 

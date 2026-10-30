@@ -32,6 +32,26 @@ async function capture(url) {
   return reply;
 }
 
+
+function youtubePage(value) {
+  try {
+    const url=new URL(value);
+    if (!httpUrl(value) || url.protocol !== "https:" || url.port) return null;
+    let id;
+    if(url.hostname==="youtu.be") id=url.pathname.split("/")[1];
+    else if(["youtube.com","www.youtube.com","m.youtube.com","music.youtube.com"].includes(url.hostname)) {
+      id=url.pathname==="/watch" ? url.searchParams.get("v") : /^\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})$/.exec(url.pathname)?.[1];
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id||"") ? `https://www.youtube.com/watch?v=${id}` : null;
+  } catch {return null;}
+}
+async function immediateDownload(url, media=false) {
+  if(!httpUrl(url)) throw Error("Invalid download address");
+  const reply=await api.runtime.sendNativeMessage(HOST,{type:media?"media":"download",url});
+  if(!reply?.ok)throw Error(reply?.error||"Update and open the complete Rivet desktop application.");
+  return reply;
+}
+
 function announceConnection() {
   api.runtime.sendNativeMessage(HOST, {type: "ping"}).catch(() => {});
 }
@@ -108,6 +128,19 @@ api.webRequest.onHeadersReceived.addListener(details => {
 api.tabs.onRemoved.addListener(tabId => mediaByTab.delete(tabId));
 api.tabs.onUpdated.addListener((tabId, change) => { if (change.status === "loading") mediaByTab.delete(tabId); });
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message?.type==="download-page" || message?.type==="download-file") {
+    (async()=>{
+      if(sender.tab && !await widgetAllowed(sender))throw Error("Enable this site before downloading");
+      let url;
+      if(message.type==="download-page") {
+        // Content scripts cannot substitute a different page or resolve arbitrary sites.
+        url=youtubePage(sender.tab ? sender.url : message.url);
+        if(!url)throw Error("This page is not a supported public YouTube video");
+      } else {url=message.url;}
+      return immediateDownload(url,message.type==="download-page");
+    })().then(sendResponse,()=>sendResponse({ok:false,error:"Could not start the download. Update Rivet, open the desktop app and check this site's access."}));
+    return true;
+  }
   if (message?.type === "widget-status") {
     widgetAllowed(sender).then(enabled => sendResponse({enabled, items: enabled
       ? [...(mediaByTab.get(sender.tab.id)?.values() || [])].filter(item => item.frameId === (sender.frameId || 0)) : []})).catch(() => sendResponse({enabled: false, items: []}));

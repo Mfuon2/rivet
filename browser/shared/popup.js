@@ -49,7 +49,7 @@ document.getElementById("disable").addEventListener("click", async () => {
     await refresh();
   } catch { status.textContent = "Could not change site permission."; }
 });
-api.tabs.query({active: true, currentWindow: true}).then(tabs => { tab = tabs[0]; return refresh(); }).catch(() => { status.textContent = "Could not inspect the current tab."; });
+api.tabs.query({active: true, currentWindow: true}).then(tabs => { tab = tabs[0]; document.getElementById("download-page").hidden = !/^https:\/\/(www\.|m\.|music\.)?youtube\.com\/(watch|shorts\/|live\/)/.test(tab?.url||""); return refresh(); }).catch(() => { status.textContent = "Could not inspect the current tab."; });
 
 // An explicit, queue-free native-host probe. Never forwards a page URL.
 document.getElementById("check").addEventListener("click", async () => {
@@ -62,4 +62,10 @@ document.getElementById("check").addEventListener("click", async () => {
     connection.textContent = reply?.ok ? "Connected. Links can be queued in Rivet." : reply?.error || "No response from Rivet.";
   } catch { connection.textContent = "Could not reach the extension worker. Reload this extension."; }
   finally { button.disabled = false; }
+});
+
+document.getElementById("download-page").addEventListener("click",async()=>{
+  status.textContent="Starting the video download…";
+  try {const reply=await api.runtime.sendMessage({type:"download-page",url:tab?.url});status.textContent=reply?.ok?"Download requested. Rivet opens automatically.":reply?.error||"Update and open Rivet.";}
+  catch {status.textContent="Update the Rivet desktop app and reload this extension.";}
 });

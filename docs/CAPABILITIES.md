@@ -31,3 +31,7 @@ Implementation status describes the current source. It does not imply production
 | Signed automatic updates | Planned |
 
 The project supports native Windows, macOS and Linux builds. Local desktop interaction checks run on macOS ARM64; CI provides automated builds and tests for all three platforms. Clean-machine installation and browser interaction coverage remain separate work.
+
+## Public YouTube downloads
+
+The extension widget and popup send a typed video-page download action to the native helper. The desktop opens and downloads video/audio streams through bundled yt-dlp and QuickJS-NG, then merges and validates a complete MP4 with FFmpeg/FFprobe. Downloads support retained partial streams and explicit pause/resume. Counters refer to the current stream; they are not byte-range segment measurements from Rivet’s HTTP engine. Public completed YouTube videos are supported; authentication, browser cookies, DRM and live streams are excluded. General HLS/DASH assembly on other sites remains unsupported. Tools are pinned by checksums in `packaging/media-tools.lock.json` and travel in signed-checksum application packages.

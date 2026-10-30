@@ -184,10 +184,12 @@ def mac_bundle(stage, binaries, app_version):
     executable_dir.mkdir(parents=True)
     for name in ("rivet-desktop", "rivet-native-host", "rivet"):
         shutil.copy2(binaries / name, executable_dir / name)
+    shutil.copytree(ROOT / "target/media-tools", executable_dir / "media", ignore=shutil.ignore_patterns("licenses"))
     info = {"CFBundleIdentifier": "org.rivet.downloads", "CFBundleName": "Rivet", "CFBundleDisplayName": "Rivet", "CFBundleExecutable": "rivet-desktop", "CFBundlePackageType": "APPL", "CFBundleShortVersionString": app_version, "CFBundleVersion": app_version, "NSHighResolutionCapable": True, "CFBundleIconFile": "Rivet.icns"}
     (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     resources = app / "Contents/Resources"
     resources.mkdir()
+    shutil.copytree(ROOT / "target/media-tools/licenses", resources / "media-licenses")
     shutil.copy2(ROOT / "LICENSE", resources / "LICENSE")
     shutil.copy2(ROOT / "assets/branding/Rivet.icns", resources / "Rivet.icns")
     shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", resources / "LUCIDE-LICENSE")
@@ -233,6 +235,9 @@ def package(output, installer=False):
     for name in ("rivet", "rivet-native-host", "rivet-desktop"):
         if not (binaries / (name + suffix)).is_file():
             raise ValueError("Build all release executables first: cargo build --release --workspace --locked")
+    for name in ("yt-dlp", "ffmpeg", "ffprobe", "qjs"):
+        if not (ROOT / "target/media-tools" / (name + suffix)).is_file():
+            raise ValueError("Prepare bundled media tools first: python scripts/prepare_media_tools.py")
     run([sys.executable, ROOT / "scripts/package_browser.py", "--chrome-store"])
     with tempfile.TemporaryDirectory(prefix="rivet-package-") as temporary:
         stage = Path(temporary)
@@ -261,6 +266,7 @@ def package(output, installer=False):
             bindir.mkdir()
             for name in ("rivet", "rivet-native-host", "rivet-desktop"):
                 shutil.copy2(binaries / (name + suffix), bindir / (name + suffix))
+            shutil.copytree(ROOT / "target/media-tools", bindir / "media")
             if system == "windows":
                 zip_tree(bundle, output / f"{base}.zip")
                 if installer:

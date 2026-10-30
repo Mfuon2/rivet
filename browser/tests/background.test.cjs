@@ -152,3 +152,27 @@ test("widget choices stay inside their frame and revoked permission stops handof
   assert.equal((await f.message({type: "capture", url: reply.items[0].url}, sender)).ok, false);
   assert.equal(f.sent.length, 1, "revoked permission cannot queue another URL");
 });
+
+test("YouTube download binds to the enabled sender page and strips playlists", async () => {
+  const f=fixture();
+  const sender={tab:{id:7},frameId:0,url:"https://www.youtube.com/watch?v=aBbaea3I5bo&list=unwanted"};
+  assert.equal((await f.message({type:"download-page"},sender)).ok,false);
+  await f.message({type:"enable",origin:"https://www.youtube.com"});
+  assert.equal((await f.message({type:"download-page",url:"https://www.youtube.com/watch?v=abcdefghijk"},sender)).ok,true);
+  assert.equal(JSON.stringify(f.sent[0].payload),JSON.stringify({type:"media",url:"https://www.youtube.com/watch?v=aBbaea3I5bo"}));
+  f.api.permissions.contains=async()=>false;
+  assert.equal((await f.message({type:"download-page"},sender)).ok,false);
+  assert.equal(f.sent.length,1);
+});
+
+test("explicit direct download starts a job; ordinary capture remains queue-only", async () => {
+  const f=fixture();
+  assert.equal((await f.message({type:"download-file",url:"https://media.example/video.mp4"})).ok,true);
+  assert.equal(f.sent[0].payload.type,"download");
+  assert.equal((await f.message({type:"capture",url:"https://media.example/video.mp4"})).ok,true);
+  assert.equal(f.sent[1].payload.type,undefined);
+  for(const url of ["https://youtube.com.evil.test/watch?v=aBbaea3I5bo","https://www.youtube.com/playlist?list=123","file:///video.mp4"]) {
+    assert.equal((await f.message({type:"download-page",url})).ok,false);
+  }
+  assert.equal(f.sent.length,2);
+});

@@ -22,6 +22,7 @@ Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause a
 - Compact desktop interface with categories, live progress, sortable/resizable columns, and light/dark themes.
 - Click an active download to open live segment progress, byte ranges, pause and resume controls.
 - Chrome, Edge, Chromium, and Firefox link handoff through a local native helper.
+- Download public YouTube videos as complete MP4 files with audio through the browser widget or extension popup.
 - Optional media-link discovery and an in-page download widget for sites you explicitly enable.
 - CLI support for downloads, queue management, and HTTP/SOCKS proxy settings.
 - Startup update checks, verified downloads, and complete application updates with restart.
@@ -61,7 +62,7 @@ Offline checks never block app startup. Update requests contact GitHub and its r
 3. Choose **Add URL**, enter a download address and destination filename, then add it to the queue.
 4. Select the entry and choose **Resume**, or choose **Start queue** to process queued downloads.
 
-Automatic queue processing is off at startup. **Stop** pauses selected active transfers; **Stop all** stops queue processing and pauses active transfers. Completed destination files are never overwritten.
+Automatic queue processing is off at startup. An explicit **Download** action in the widget or popup opens Rivet and starts that selected download automatically. **Stop** pauses selected active transfers; **Stop all** stops queue processing and pauses active transfers. Completed destination files are never overwritten.
 
 ## Browser integration
 
@@ -74,6 +75,14 @@ If a missing extension is not yet available from a store, Rivet downloads the ma
 The extension connects automatically after installation; its **Finish setup** page and **Check connection** button are available for troubleshooting. Right-click a download link and select **Send link to Rivet**. Captured links appear in the desktop queue.
 
 See [browser setup](docs/BROWSER.md) for detailed instructions and troubleshooting.
+
+## Video downloads
+
+Enable media discovery for the site in the extension popup and approve its browser permission. On a public YouTube video, open **Download with Rivet**, then choose **Download video with audio · MP4**. Rivet opens automatically, resolves the video and audio streams, and merges them into an MP4 in `Downloads/Rivet`. The popup also has a **Download this video as MP4** button. Click the active job in Rivet to see progress and pause/resume controls.
+
+Release installers include pinned yt-dlp, QuickJS-NG, FFmpeg and FFprobe. No terminal setup is required. Media components update with Rivet’s verified application updates. Public, completed YouTube videos are supported; private, sign-in-only, live and DRM-protected content is not. Rivet does not import browser cookies. Other sites currently support direct HTTP/HTTPS media files; arbitrary HLS/DASH playlists are saved as playlist files only. Only download media you have permission to save.
+
+After updating a development installation, reload the unpacked extension in the browser’s extensions page and refresh existing video tabs once.
 
 ## Build from source
 
@@ -90,10 +99,11 @@ Build optimized executables and a native package on the target OS:
 
 ```sh
 cargo build --release --workspace --locked
+python3 scripts/prepare_media_tools.py
 python3 scripts/release.py package --installer
 ```
 
-Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
+Media packaging requires GNU Make and a C toolchain; the preparation script downloads checksum-pinned components and builds FFmpeg from source. For debug media downloads, set `RIVET_MEDIA_TOOLS` to the absolute path of `target/media-tools`. Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
 
 ## Command-line usage
 
@@ -115,7 +125,7 @@ Use `--help` for available commands. `--database` selects a queue database; `--p
 ## Current limitations
 
 - Segmented resume requires a known size, byte-range support, and a strong ETag. Other resources restart after interruption.
-- HLS/DASH assembly, session-cookie forwarding, automatic browser download takeover, FTP, site crawling, recurring schedules, and bandwidth budgets are not implemented.
+- General HLS/DASH assembly outside the supported YouTube download path, session-cookie forwarding, automatic browser download takeover, FTP, site crawling, recurring schedules, and bandwidth budgets are not implemented.
 - Safari is not supported yet.
 - Destination filesystems must support hard links for final file publication.
 - Local queues and resume metadata are not encrypted and may contain access tokens from download URLs.
@@ -147,3 +157,5 @@ Read the [privacy statement](PRIVACY.md) and [security design](SECURITY.md). Bro
 ## License
 
 Rivet is licensed under the [MIT License](LICENSE). Action and file icons use [Lucide](https://lucide.dev/) with the included [Lucide/Feather notices](crates/rivet-desktop/assets/lucide/LICENSE). The default font is Segoe UI when installed or supplied locally. Poppins is bundled as a fallback under the [SIL Open Font License](assets/fonts/OFL.txt). Microsoft font files are not included in source or releases. The product logo is included in [assets/branding](assets/branding/).
+
+Bundled media tools retain their own licenses: yt-dlp standalone distribution (GPL-3.0-or-later), FFmpeg (LGPL-2.1-or-later configuration), and QuickJS-NG (MIT). Sources, build configuration and notices accompany the media programs in each application package.

@@ -10,3 +10,6 @@ pub mod worker;
 pub use download::{DownloadRequest, DownloadResult, Engine, Progress};
 pub use progress::{SegmentSnapshot, TransferSnapshot, TransferState};
 pub use tokio_util::sync::CancellationToken;
+
+pub mod desktop;
+pub mod media;

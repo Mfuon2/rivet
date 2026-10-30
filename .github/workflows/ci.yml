@@ -36,3 +36,8 @@ jobs:
       - run: node --check browser/shared/popup.js
       - run: node --test browser/tests/background.test.cjs
       - run: python scripts/package_browser.py
+      - name: Windows media build prerequisites
+        if: runner.os == 'Windows'
+        run: choco install make --yes --no-progress
+      - name: Build and verify bundled media tools
+        run: python scripts/prepare_media_tools.py

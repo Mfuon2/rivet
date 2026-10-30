@@ -1,4 +1,4 @@
-//! Browser native messaging: bounded little-endian JSON frames; queue only.
+//! Browser native messaging: bounded little-endian JSON frames; captures queue, explicit download actions start the desktop.
 use crate::{DownloadRequest, queue::Queue};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,8 @@ pub struct CaptureReply {
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Control {
     Ping {},
+    Media { url: String },
+    Download { url: String },
 }
 
 #[derive(Deserialize)]
@@ -94,8 +96,54 @@ pub fn serve_with_observer(
     downloads: &Path,
     mut connected: impl FnMut(),
 ) -> Result<()> {
+    serve_with_actions(reader, writer, queue, downloads, &mut connected, || Ok(()))
+}
+pub fn serve_with_actions(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    queue: &Queue,
+    downloads: &Path,
+    mut connected: impl FnMut(),
+    mut start_media: impl FnMut() -> Result<()>,
+) -> Result<()> {
     while let Some(message) = read_frame(reader)? {
+        let mut automatic = false;
         let capture = match message {
+            NativeMessage::Control(Control::Download { url }) => {
+                automatic = true;
+                Capture { url }
+            }
+            NativeMessage::Control(Control::Media { url }) => {
+                let result = (|| {
+                    let canonical = crate::media::youtube_page(&url)?;
+                    let id = canonical.split("v=").nth(1).unwrap();
+                    std::fs::create_dir_all(downloads)?;
+                    let destination = downloads.join(format!(
+                        "video-{id}-{}.mp4",
+                        &uuid::Uuid::new_v4().simple().to_string()[..8]
+                    ));
+                    start_media()?;
+                    let job = queue.enqueue_media(DownloadRequest::new(canonical, destination))?;
+                    Ok::<_, anyhow::Error>(job)
+                })();
+                let reply = match result {
+                    Ok(id) => CaptureReply {
+                        ok: true,
+                        id: Some(id),
+                        error: None,
+                    },
+                    Err(error) => CaptureReply {
+                        ok: false,
+                        id: None,
+                        error: Some(error.to_string()),
+                    },
+                };
+                write_frame(writer, &reply)?;
+                if reply.ok {
+                    connected();
+                }
+                continue;
+            }
             NativeMessage::Control(Control::Ping {}) => {
                 write_frame(
                     writer,
@@ -141,7 +189,14 @@ pub fn serve_with_observer(
                     name
                 }
             ));
-            queue.enqueue(DownloadRequest::new(capture.url, destination), 0)
+            let request = DownloadRequest::new(capture.url, destination);
+            request.validate()?;
+            if automatic {
+                start_media()?;
+                queue.enqueue_download(request)
+            } else {
+                queue.enqueue(request, 0)
+            }
         })();
         let reply = match result {
             Ok(id) => CaptureReply {

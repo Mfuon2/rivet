@@ -14,3 +14,7 @@ __pycache__/
 
 # Local development conversation checkpoints.
 docs/SESSION-NOTES.md
+
+# Personal Microsoft font files are used locally, never redistributed.
+[sS]egoe*.ttf
+[sS]egoe*.woff

@@ -69,7 +69,7 @@ On startup, Rivet detects a supported default browser, prepares the extension fi
 
 Setup checks whether the extension is present, prepares the native connection, opens an available store installation page, and confirms the connection automatically after browser approval. You can continue or restart Rivet once setup completes.
 
-While store approval is pending, setup offers the matching GitHub ZIP, the already-prepared extension folder and the browser installer page. Chrome/Edge/Chromium use **Developer mode → Load unpacked**; Firefox uses **Load Temporary Add-on**, which must be repeated after Firefox restarts. Rivet does not bypass browser approval.
+If a missing extension is not yet available from a store, Rivet downloads the matching release ZIP into private temporary storage, verifies its release signature and checksum, validates and unpacks the package, and opens browser setup with a permanent prepared folder. There are no manual download or extraction steps. Offline setup uses the trusted bundled files. Chrome/Edge/Chromium still require **Developer mode → Load unpacked** for unpublished extensions; Firefox temporary add-ons need **Load Temporary Add-on** and disappear on browser restart. Published store installations use the browser’s approval flow.
 
 The extension connects automatically after installation; its **Finish setup** page and **Check connection** button are available for troubleshooting. Right-click a download link and select **Send link to Rivet**. Captured links appear in the desktop queue.
 
@@ -146,4 +146,4 @@ Read the [privacy statement](PRIVACY.md) and [security design](SECURITY.md). Bro
 
 ## License
 
-Rivet is licensed under the [MIT License](LICENSE). Action and file icons use [Lucide](https://lucide.dev/) with the included [Lucide/Feather notices](crates/rivet-desktop/assets/lucide/LICENSE). The product logo is included in [assets/branding](assets/branding/).
+Rivet is licensed under the [MIT License](LICENSE). Action and file icons use [Lucide](https://lucide.dev/) with the included [Lucide/Feather notices](crates/rivet-desktop/assets/lucide/LICENSE). The default font is Segoe UI when installed or supplied locally. Poppins is bundled as a fallback under the [SIL Open Font License](assets/fonts/OFL.txt). Microsoft font files are not included in source or releases. The product logo is included in [assets/branding](assets/branding/).

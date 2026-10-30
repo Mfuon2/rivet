@@ -21,11 +21,15 @@ firefox = json.loads((root / "browser/firefox/manifest.json").read_text())
 assert firefox["browser_specific_settings"]["gecko"]["id"] == distribution["firefox_extension_id"]
 for browser in ("chromium", "firefox"):
     output = root / "dist" / browser
+    if output.exists():
+        shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(root / "browser" / browser / "manifest.json", output / "manifest.json")
     for source in (root / "browser" / "shared").iterdir():
         if source.is_file():
             shutil.copyfile(source, output / source.name)
+    for name, source in [("Poppins-Regular.ttf", "Poppins-Regular.ttf"), ("Poppins-SemiBold.ttf", "Poppins-SemiBold.ttf"), ("POPPINS-LICENSE.txt", "OFL.txt")]:
+        shutil.copy2(root / "assets/fonts" / source, output / name)
     icons = output / "icons"
     icons.mkdir(exist_ok=True)
     for size in (16, 32, 48, 64, 128):
@@ -43,6 +47,8 @@ for browser in ("chromium", "firefox"):
 
 if args.chrome_store:
     output = root / "dist/chrome-store"
+    if output.exists():
+        shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
     store_manifest = dict(chromium)
     store_manifest.pop("key", None)

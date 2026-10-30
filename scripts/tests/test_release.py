@@ -44,6 +44,19 @@ class ReleaseTests(unittest.TestCase):
         release.checksums(self.folder)
         self.assertFalse(signature.exists())
 
+    def test_personal_fonts_and_stale_files_never_enter_extension_releases(self):
+        import zipfile
+        output = release.ROOT / "dist/chromium"
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "segoeui.woff").write_bytes(b"private font sentinel, not a font")
+        (output / "unrelated.txt").write_text("stale generated output")
+        subprocess.run([__import__("sys").executable, str(release.ROOT / "scripts/package_browser.py"), "--chrome-store"], check=True, stdout=subprocess.DEVNULL)
+        for name in ["rivet-chromium.zip", "rivet-chrome-store.zip"]:
+            with zipfile.ZipFile(release.ROOT / "dist" / name) as archive:
+                self.assertNotIn("segoeui.woff", archive.namelist())
+                self.assertNotIn("unrelated.txt", archive.namelist())
+                self.assertNotIn("src:url", archive.read("user-font.css").decode())
+
     def test_extension_packages_are_reproducible(self):
         command = [__import__("sys").executable, str(release.ROOT / "scripts/package_browser.py")]
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
@@ -64,6 +77,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(manifest["version"], release.version())
             for icon in manifest["icons"].values():
                 self.assertIn(icon, archive.namelist())
+            for font in ["Poppins-Regular.ttf", "Poppins-SemiBold.ttf", "POPPINS-LICENSE.txt"]:
+                self.assertIn(font, archive.namelist())
             self.assertIn("background.js", archive.namelist())
             self.assertIn("popup.html", archive.namelist())
         development = json.loads((release.ROOT / "dist/chromium/manifest.json").read_text())

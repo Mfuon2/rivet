@@ -191,6 +191,7 @@ def mac_bundle(stage, binaries, app_version):
     shutil.copy2(ROOT / "LICENSE", resources / "LICENSE")
     shutil.copy2(ROOT / "assets/branding/Rivet.icns", resources / "Rivet.icns")
     shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", resources / "LUCIDE-LICENSE")
+    shutil.copy2(ROOT / "assets/fonts/OFL.txt", resources / "POPPINS-LICENSE.txt")
     # Ad-hoc signing is free and supports local integrity checks. It is NOT Developer ID/notarization.
     run(["codesign", "--force", "--deep", "--sign", "-", app])
     return app
@@ -210,6 +211,7 @@ def linux_deb(stage, output, base, app_version, machine):
     licenses.mkdir(parents=True)
     shutil.copy2(ROOT / "LICENSE", licenses / "copyright")
     shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", licenses / "LUCIDE-LICENSE")
+    shutil.copy2(ROOT / "assets/fonts/OFL.txt", licenses / "POPPINS-LICENSE.txt")
     control = package / "DEBIAN"
     control.mkdir()
     architecture = {"x86_64": "amd64", "aarch64": "arm64"}[machine]
@@ -241,6 +243,7 @@ def package(output, installer=False):
         shutil.copy2(ROOT / "release/VERIFYING.md", bundle / "VERIFYING.md")
         shutil.copytree(ROOT / "assets/branding", bundle / "branding")
         shutil.copy2(ROOT / "crates/rivet-desktop/assets/lucide/LICENSE", bundle / "LUCIDE-LICENSE")
+        shutil.copy2(ROOT / "assets/fonts/OFL.txt", bundle / "POPPINS-LICENSE.txt")
         docs = bundle / "docs"
         docs.mkdir()
         for name in ("BROWSER.md", "CAPABILITIES.md", "ROADMAP.md"):

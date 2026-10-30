@@ -13,15 +13,15 @@ If Rivet finds a disabled extension, it opens the browser's extensions page so y
 
 Rivet checks the known Chrome store item for public availability when an install URL has not yet been configured. An unpublished/error listing is not treated as installable. Firefox needs a Mozilla-signed add-on for permanent installation. Store approval is separate from GitHub releases.
 
-## GitHub ZIP fallback
+## Automatic package preparation
 
-When the store extension is unavailable or not found, setup offers **Download extension ZIP**, **Open GitHub releases**, **Open prepared extension folder**, and **Open extension installer**. The ZIP link matches the installed app's release and the selected browser. Rivet has already prepared the same bundled files locally, so you can proceed without manually extracting an archive.
+When an extension is missing and no public store listing is available, Rivet downloads the ZIP matching the installed application version and browser into private temporary storage. It authenticates the release checksum manifest with its embedded Minisign key, verifies the ZIP checksum, and validates all entries, size limits, manifest version and extension identity before changing the prepared files. Symlinks, unexpected paths and incomplete packages are rejected.
 
-- Chrome, Edge and Chromium: enable Developer mode, choose **Load unpacked**, and select the prepared folder. Raw ZIP files cannot be installed directly. Use **Development setup** to copy the folder path if needed.
-- Firefox: choose **Load Temporary Add-on** and select the prepared `manifest.json`. Temporary add-ons disappear when Firefox restarts; restart Rivet rather than Firefox if you want to keep a temporary add-on loaded.
-- When updating an existing unpacked extension, use its browser-side **Reload** control after Rivet prepares the new files. Rivet does not edit the browser profile or bypass the browser's approval UI.
+The extension is unpacked into the permanent application-data folder automatically. Temporary archive files are removed; the browser never loads its extension from an expiring temp directory. A per-version preparation receipt avoids repeating the download. If the network is unavailable, the trusted copy embedded in the installed app remains ready. Rivet automatically opens browser setup and the prepared folder once, and watches the live connection. **Continue in Chrome/Edge/Chromium/Firefox** reopens this flow; **Continue to Rivet** postpones it.
 
-The helper accepts Rivet's fixed development identity and its configured Chrome store identity. No terminal commands or extension-ID copying are required for packaged Rivet. Safari is not supported yet.
+Chrome-based browsers on macOS and Windows prohibit silent installation of unpublished extensions. Enable Developer mode, choose **Load unpacked**, then select the prepared folder that Rivet opens. Firefox requires Mozilla signing for permanent installation; its **Load Temporary Add-on** option can select the prepared `manifest.json` during development. These browser controls cannot be approved by Rivet. Store-approved installs use normal browser confirmation. Rivet does not modify profile preferences, force enterprise policies or ignore a browser-recorded removal.
+
+**Connection details** contains diagnostics and an optional **Development setup** section with folder/address copy controls and a release link. Normal setup needs no terminal commands, extension-ID copying, manual ZIP download or manual extraction. Reload an already-loaded unpacked extension from the browser’s own controls after a development update.
 
 Browser captures only queue URLs. Downloads start when you explicitly start them in Rivet or opt into automatic queue processing. The helper does not execute downloaded files or launch a shell.
 

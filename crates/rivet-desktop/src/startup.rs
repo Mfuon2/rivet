@@ -23,9 +23,17 @@ pub struct Report {
     install_requested: bool,
     isolated: bool,
     started: i64,
+    package_source: String,
+    package_warning: Option<String>,
+}
+enum SetupEvent {
+    Progress(u8, &'static str),
+    Finished(Box<Result<Report, String>>),
 }
 pub struct Startup {
-    receiver: mpsc::Receiver<Result<Report, String>>,
+    receiver: mpsc::Receiver<SetupEvent>,
+    phase: u8,
+    phase_text: String,
     report: Option<Result<Report, String>>,
     active: bool,
     force: bool,
@@ -43,10 +51,16 @@ impl Startup {
     fn for_browser(force: bool, deferred: bool, browser: Option<Browser>) -> Self {
         let (tx, receiver) = mpsc::channel();
         std::thread::spawn(move || {
-            let _ = tx.send(check(browser).map_err(|e| e.to_string()));
+            let report = check(browser, !deferred || force, |phase, text| {
+                let _ = tx.send(SetupEvent::Progress(phase, text));
+            })
+            .map_err(|e| e.to_string());
+            let _ = tx.send(SetupEvent::Finished(Box::new(report)));
         });
         Self {
             receiver,
+            phase: 0,
+            phase_text: "Finding your default browser…".into(),
             report: None,
             active: true,
             force,
@@ -75,12 +89,24 @@ impl Startup {
             return false;
         }
         if self.report.is_none() {
-            match self.receiver.try_recv() {
-                Ok(report) => self.report = Some(report),
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    self.report = Some(Err("Setup stopped. Retry or continue to Rivet.".into()))
+            loop {
+                match self.receiver.try_recv() {
+                    Ok(SetupEvent::Progress(phase, text)) => {
+                        self.phase = phase;
+                        self.phase_text = text.into();
+                    }
+                    Ok(SetupEvent::Finished(report)) => {
+                        self.report = Some(*report);
+                        self.phase = 3;
+                        break;
+                    }
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.report =
+                            Some(Err("Setup stopped. Retry or continue to Rivet.".into()));
+                        break;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
                 }
-                Err(mpsc::TryRecvError::Empty) => {}
             }
             if let Some(Ok(report)) = &self.report {
                 let receipt = Distribution::bundled()
@@ -158,14 +184,26 @@ impl Startup {
                 let url = if disabled {
                     Some(management_page(report.browser))
                 } else if report.inspection.installed.is_empty() {
-                    report.listing.as_ref().map(|l| l.url.as_str())
+                    Some(
+                        report
+                            .listing
+                            .as_ref()
+                            .map(|l| l.url.as_str())
+                            .unwrap_or_else(|| report.browser.extensions_page()),
+                    )
                 } else {
                     None
                 };
                 if let Some(url) = url {
+                    if report.listing.is_none()
+                        && report.inspection.installed.is_empty()
+                        && self.allow_request
+                    {
+                        let _ = browser_install::open_folder(&report.extension);
+                    }
                     self.notice = match browser_install::open_browser(report.browser, url) {
                         Ok(()) => if disabled { "Browser extensions opened. Turn on Rivet; this screen will update automatically.".into() }
-                            else { "Installation page opened. Approve Add extension in your browser; Rivet will finish connecting automatically.".into() },
+                            else if report.listing.is_some() { "Installation page opened. Approve Rivet in your browser to finish.".into() } else { "Browser setup and the prepared extension folder opened.".into() },
                         Err(_) => "Could not open the browser automatically. Use the button below to try again.".into(),
                     };
                 }
@@ -174,109 +212,104 @@ impl Startup {
         let mut retry = false;
         let mut continue_clicked = false;
         let mut restart_app = false;
-        egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.add_space(30.);
-                ui.horizontal(|ui| {
-                    ui.add(widgets::logo(48.));
-                    ui.vertical(|ui| {
-                        ui.heading(if self.confirmed { "Rivet is ready" } else { "Connect your browser" });
-                        ui.label("Rivet prepares the desktop connection for you.");
-                    });
-                });
-                ui.add_space(18.);
-                match &self.report {
-                    None => {
-                        ui.horizontal(|ui| { ui.spinner(); ui.label("Detecting your browser, checking the extension and preparing setup…"); });
-                        ui.add_space(12.);
-                        continue_clicked = ui.button("Continue to Rivet").clicked();
-                    }
-                    Some(Err(error)) => {
-                        ui.label(error);
-                        ui.label("You can use Rivet now and return to Browsers whenever you need setup.");
-                        retry = ui.button("Retry setup").clicked();
-                        continue_clicked = ui.button("Continue to Rivet").clicked();
-                    }
-                    Some(Ok(report)) => {
-                        ui.strong(format!("Browser: {}", report.browser.name()));
-                        ui.horizontal(|ui| { ui.add(widgets::image("circle-check", 16., egui::Color32::from_rgb(48,151,105))); ui.label("Desktop helper prepared and registered automatically."); });
-                        if self.confirmed {
-                            ui.horizontal(|ui| { ui.add(widgets::image("circle-check", 16., egui::Color32::from_rgb(48,151,105))); ui.label("Extension connected. Browser setup is complete."); });
-                            ui.label("You can continue now. A restart is normally unnecessary; restart Rivet if you prefer.");
-                            ui.horizontal(|ui| {
-                                continue_clicked = ui.button("Continue to Rivet").clicked();
-                                restart_app = ui.add_enabled(can_restart, egui::Button::new("Restart Rivet")).clicked();
+        let palette = Palette::new(ui.visuals().dark_mode);
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(palette.background)).show(ui, |ui| {
+            egui::ScrollArea::vertical().auto_shrink([false,false]).show(ui, |ui| {
+                ui.add_space(20.);
+                let width=(ui.available_width()-48.).clamp(300.,820.);
+                let left=((ui.available_width()-width)*0.5).max(0.);
+                ui.horizontal(|ui| {ui.add_space(left);ui.vertical(|ui| {
+                    ui.set_width(width);
+                    egui::Frame::new().fill(palette.surface).stroke(egui::Stroke::new(1.,palette.border)).corner_radius(20).inner_margin(24).show(ui,|ui| {
+                        ui.horizontal(|ui| {
+                            ui.add(widgets::logo(38.));
+                            ui.label(egui::RichText::new("Rivet").font(semibold(18.)).color(palette.ink));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
+                                let browser=self.report.as_ref().and_then(|r|r.as_ref().ok()).map(|r|r.browser.name()).unwrap_or("Detecting browser");
+                                egui::Frame::new().fill(palette.tint).corner_radius(14).inner_margin(egui::Margin::symmetric(12,5)).show(ui,|ui|{ui.label(egui::RichText::new(browser).size(12.).color(palette.accent));});
                             });
-                            if !can_restart { ui.small("Pause active downloads before restarting Rivet."); }
-                        } else {
-                            ui.label(report.inspection.summary());
-                            ui.separator();
-                            if report.inspection.installed.iter().any(|e| e.enabled == Some(false)) {
-                                ui.strong("Turn on Rivet in your browser");
-                                ui.label("The extension is already installed. Enable it and Rivet will detect the connection automatically.");
-                                if ui.button("Open browser extensions").clicked() {
-                                    self.notice = open_page(report.browser, management_page(report.browser));
-                                }
-                            } else if !report.inspection.installed.is_empty() {
-                                ui.strong("Waiting for your browser to connect…");
-                                ui.label("Keep your browser open. Connection checks run automatically and can take up to a minute. The extension's Finish setup page can connect immediately.");
-                                if ui.button("Open browser extensions").clicked() { self.notice = open_page(report.browser, management_page(report.browser)); }
-                            } else if let Some(listing) = &report.listing {
-                                ui.strong("Approve the extension in your browser");
-                                ui.label("The browser downloads and installs the extension after you approve it. Rivet cannot approve browser permissions on your behalf.");
-                                if report.install_requested { ui.label("A browser-approved installation request is prepared. If the browser does not pick it up, restart the browser when convenient."); }
-                                if ui.button("Install Rivet extension").clicked() { self.notice = open_page(report.browser, &listing.url); }
-                            } else {
-                                ui.strong(if report.store_check_failed { "The extension store could not be reached" } else { "Browser-store approval is pending" });
-                                ui.label(if report.store_check_failed { "Your desktop connection is ready. Check your connection and retry setup to open the installation page." } else { "Rivet's store item is not publicly available yet. Automatic store installation becomes available when it is published. You can use the desktop app now." });
-                                retry = ui.button("Retry setup").clicked();
-                            }
-                            if report.inspection.installed.is_empty() {
-                                ui.add_space(10.);
-                                ui.group(|ui| {
-                                    ui.strong("Install from GitHub");
-                                    ui.label("Get the extension ZIP from this app's GitHub release, or use the matching files Rivet has already prepared for you. No terminal commands or extension-ID copying are needed.");
-                                    ui.horizontal_wrapped(|ui| {
-                                        if ui.button("Download extension ZIP").clicked() {
-                                            let kind = if report.browser == Browser::Firefox { "firefox" } else { "chromium" };
-                                            let version = env!("CARGO_PKG_VERSION");
-                                            self.notice = open_page(report.browser, &format!("https://github.com/Mfuon2/rivet/releases/download/v{version}/rivet-{version}-extension-{kind}.zip"));
-                                        }
-                                        if ui.button("Open GitHub releases").clicked() { self.notice = open_page(report.browser, "https://github.com/Mfuon2/rivet/releases"); }
-                                        if ui.button("Open prepared extension folder").clicked() { self.notice = match browser_install::open_folder(&report.extension) { Ok(()) => "Prepared extension folder opened. Select it in your browser's extension loader.".into(), Err(_) => "Could not open the folder. Its path is available under Development setup.".into() }; }
-                                        if ui.button("Open extension installer").clicked() { self.notice = open_page(report.browser, report.browser.extensions_page()); }
+                        });
+                        ui.add_space(22.);
+                        ui.label(egui::RichText::new(if self.confirmed {"Your browser is connected."} else {"Let’s connect your browser."}).font(semibold(27.)).color(palette.ink));
+                        ui.label(egui::RichText::new(if self.confirmed {"You're ready to send links and media to your download queue."}else{"Rivet handles the preparation. Your browser controls the final approval."}).size(13.).color(palette.muted));
+                        ui.add_space(18.);
+                        ui.add(egui::ProgressBar::new(if self.confirmed {1.} else if self.report.is_some(){0.75}else{(self.phase as f32+0.4)/4.}).desired_height(4.).fill(if self.confirmed {palette.success}else{palette.accent}));
+                        ui.add_space(14.);
+                        let report=self.report.as_ref().and_then(|r|r.as_ref().ok());
+                        step(ui,&palette,1,"Find your browser",report.map(|r|format!("{} detected for this connection",r.browser.name())).as_deref().unwrap_or("Checking your default browser"),report.is_some() || self.phase>0,self.report.is_none() && self.phase==0);
+                        step(ui,&palette,2,"Prepare the desktop connection","Native helper registered for your account",report.is_some() || self.phase>1,self.report.is_none() && self.phase==1);
+                        step(ui,&palette,3,"Prepare your extension",report.map(|r|r.package_source.as_str()).unwrap_or(self.phase_text.as_str()),report.is_some(),self.report.is_none() && self.phase==2);
+                        step(ui,&palette,4,"Connect with your browser",if self.confirmed {"Live connection confirmed"}else{"Waiting for your browser to confirm"},self.confirmed,report.is_some() && !self.confirmed);
+                        ui.add_space(14.);
+                        match &self.report {
+                            None=>{
+                                ui.label(egui::RichText::new(&self.phase_text).color(palette.muted));
+                                ui.add_space(12.);continue_clicked=secondary(ui,"Continue to Rivet").clicked();
+                            },
+                            Some(Err(error))=>{
+                                callout(ui,&palette,"Setup could not finish",error);
+                                ui.add_space(14.);ui.horizontal_wrapped(|ui|{retry=primary(ui,&palette,"Retry setup").clicked();continue_clicked=secondary(ui,"Continue to Rivet").clicked();});
+                            },
+                            Some(Ok(report))=>{
+                                if self.confirmed {
+                                    callout(ui,&palette,"You're all set","The browser extension and desktop app are connected. No restart is needed.");
+                                    ui.add_space(16.);
+                                    ui.horizontal_wrapped(|ui|{
+                                        continue_clicked=primary(ui,&palette,"Continue to Rivet").clicked();
+                                        restart_app=ui.add_enabled(can_restart,egui::Button::new("Restart Rivet").min_size(egui::vec2(130.,42.)).corner_radius(9)).clicked();
                                     });
-                                    ui.label(if report.browser == Browser::Firefox { "In Firefox, choose Load Temporary Add-on and select manifest.json in the prepared folder. Temporary add-ons disappear when Firefox restarts; a signed Mozilla release is needed for permanent installation." } else { "In your browser, enable Developer mode and choose Load unpacked. Select the prepared folder; Rivet has already extracted its files. Chromium browsers cannot install a raw ZIP directly." });
-                                    ui.small("After the browser loads the extension, Rivet detects the connection and completes setup automatically.");
+                                    if !can_restart {ui.small("Pause active downloads before restarting.");}
+                                } else {
+                                    let disabled=report.inspection.installed.iter().any(|e|e.enabled==Some(false));
+                                    let (title,description)=if disabled {
+                                        (format!("Turn on Rivet in {}",report.browser.name()),"The extension is installed. Enable it in the browser window; Rivet will connect automatically.".to_owned())
+                                    } else if !report.inspection.installed.is_empty() {
+                                        (format!("Waiting for {}",report.browser.name()),"Keep your browser open. Rivet checks the connection automatically; this may take up to a minute.".to_owned())
+                                    } else if report.listing.is_some() {
+                                        (format!("Approve Rivet in {}",report.browser.name()),"The installation page is ready. Choose Add extension in your browser. Rivet will finish the connection automatically.".to_owned())
+                                    } else if report.browser==Browser::Firefox {
+                                        ("Files ready. Firefox approval needed.".into(),"Mozilla signing is required for permanent installation. For this unpublished build, choose Load Temporary Add-on and select manifest.json in the prepared folder.".into())
+                                    } else {
+                                        (format!("Files ready. Finish in {}.",report.browser.name()),"Chrome-based browsers block silent installation of unpublished extensions. In the opened browser, enable Developer mode, choose Load unpacked, then select the opened Rivet folder.".into())
+                                    };
+                                    callout(ui,&palette,&title,&description);
+                                    if !self.notice.is_empty(){ui.add_space(8.);ui.label(egui::RichText::new(&self.notice).size(11.5).color(palette.muted));}
+                                    ui.add_space(16.);
+                                    ui.horizontal_wrapped(|ui|{
+                                        if primary(ui,&palette,&format!("Continue in {}",report.browser.name())).clicked(){self.notice=open_setup(report);}
+                                        continue_clicked=secondary(ui,"Continue to Rivet").clicked();
+                                    });
+                                    ui.add_space(8.);ui.label(egui::RichText::new("You can use Rivet while your browser connects.").size(11.5).color(palette.muted));
+                                }
+                                ui.add_space(16.);
+                                ui.separator();ui.add_space(6.);
+                                ui.collapsing("Connection details",|ui|{
+                                    ui.label(report.inspection.summary());
+                                    ui.label(format!("{} browser profiles checked",report.inspection.profiles_checked));
+                                    ui.label(format!("Helper: {}",report.manifest.display()));
+                                    if report.store_check_failed {ui.label("The browser store could not be reached. The bundled extension is ready to use.");}
+                                    if let Some(warning)=&report.package_warning{ui.label(warning);}
+                                    if report.listing.is_none(){ui.label(if report.store_check_failed { "Store availability could not be confirmed. The prepared development package can be loaded from browser setup." } else { "Store publication is pending. Browser confirmation is required for this development package." });}
+                                    if report.install_requested{ui.label("A standard browser installation request has been registered.");}
+                                    retry=ui.button("Check again").clicked();
+                                    ui.collapsing("Development setup",|ui|{
+                                        ui.label("The prepared folder is permanent; temporary download files are removed automatically.");
+                                        ui.add(egui::Label::new(egui::RichText::new(report.extension.display().to_string()).monospace()).wrap());
+                                        ui.horizontal_wrapped(|ui|{
+                                            if ui.button("Open extension folder").clicked(){let _=browser_install::open_folder(&report.extension);}
+                                            if ui.button("Copy extension folder").clicked(){ui.ctx().copy_text(report.extension.display().to_string());}
+                                            if ui.button("Copy browser setup address").clicked(){ui.ctx().copy_text(report.browser.extensions_page().into());}
+                                            if ui.button("Open GitHub releases").clicked(){self.notice=open_page(report.browser,"https://github.com/Mfuon2/rivet/releases");}
+                                        });
+                                    });
                                 });
                             }
-                            if !self.notice.is_empty() { ui.colored_label(ui.visuals().hyperlink_color, &self.notice); }
-                            ui.add_space(10.);
-                            ui.horizontal(|ui| { ui.spinner(); ui.label("Waiting for extension confirmation — this screen updates automatically."); });
-                            ui.add_space(12.);
-                            continue_clicked = ui.button("Continue to Rivet").clicked();
-                            ui.small("Continuing defers this guide. You can reopen it from Browsers.");
                         }
-                        ui.add_space(12.);
-                        ui.collapsing("Development setup", |ui| {
-                            ui.label("Only needed for an unpublished development build. Normal store installations do not require these steps.");
-                            ui.label(if report.browser == Browser::Firefox { "Open about:debugging#/runtime/this-firefox, choose Load Temporary Add-on, and select manifest.json from the prepared folder. Temporary add-ons are removed on browser restart." } else { "Open the browser's extensions page, enable Developer mode, choose Load unpacked, and select the prepared folder." });
-                            ui.horizontal(|ui| {
-                                if ui.button("Open browser setup").clicked() { self.notice = open_page(report.browser, report.browser.extensions_page()); }
-                                if ui.button("Open extension folder").clicked() { self.notice = match browser_install::open_folder(&report.extension) { Ok(()) => "Prepared extension folder opened.".into(), Err(_) => "Could not open the folder. Copy its path below.".into() }; }
-                            });
-                            if ui.button("Copy browser setup address").clicked() { ui.ctx().copy_text(report.browser.extensions_page().into()); self.notice = "Browser setup address copied.".into(); }
-                            ui.add(egui::Label::new(egui::RichText::new(report.extension.display().to_string()).monospace()).wrap());
-                            if ui.button("Copy extension folder").clicked() { ui.ctx().copy_text(report.extension.display().to_string()); self.notice = "Extension folder copied.".into(); }
-                        });
-                        ui.collapsing("Connection details", |ui| {
-                            ui.label("Native helper registration:"); ui.code(report.manifest.display().to_string());
-                            ui.label(format!("{} browser profiles checked. Custom profiles are confirmed by the extension's live connection.", report.inspection.profiles_checked));
-                            if ui.button("Check again").clicked() { retry = true; }
-                        });
-                        ui.small("Rivet does not change your default browser or use enterprise force-install policies.");
-                    }
-                }
+                    });
+                    ui.add_space(16.);
+                    ui.horizontal(|ui|{ui.add(widgets::image("circle-check",14.,palette.muted));ui.label(egui::RichText::new("Local connection. No account required. Your default browser stays yours.").size(11.5).color(palette.muted));});
+                    ui.add_space(6.);
+                });});
             });
         });
         if continue_clicked {
@@ -325,7 +358,12 @@ fn open_page(browser: Browser, url: &str) -> String {
         Err(_) => "Could not open the browser. Check that it is installed, then retry.".into(),
     }
 }
-fn check(selected: Option<Browser>) -> anyhow::Result<Report> {
+fn check(
+    selected: Option<Browser>,
+    fetch: bool,
+    progress: impl Fn(u8, &'static str),
+) -> anyhow::Result<Report> {
+    progress(0, "Finding your default browser…");
     use anyhow::{Context, ensure};
     // Preserve the just-confirmed handshake across a user-requested relaunch.
     let started = now()
@@ -339,6 +377,7 @@ fn check(selected: Option<Browser>) -> anyhow::Result<Report> {
     } else {
         browser_setup::detect_default()?
     };
+    progress(1, "Preparing the desktop connection…");
     let database = Queue::default_path()?;
     let data = database
         .parent()
@@ -372,6 +411,7 @@ fn check(selected: Option<Browser>) -> anyhow::Result<Report> {
     let manifest =
         browser_setup::register(platform, &home, &data, browser, &helper, &distribution)?;
     let inspection = browser_install::inspect(platform, &home, browser, &distribution);
+    progress(2, "Checking the browser extension…");
     let mut store_check_failed = false;
     let listing = if inspection.installed.is_empty() && !isolated {
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -387,6 +427,29 @@ fn check(selected: Option<Browser>) -> anyhow::Result<Report> {
     } else {
         browser_install::configured_listing(browser, &distribution)
     };
+    let mut package_source = "Prepared securely from this app".to_owned();
+    let mut package_warning = None;
+    if fetch && inspection.installed.is_empty() && listing.is_none() && !isolated {
+        progress(2, "Downloading and verifying the extension…");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        match runtime.block_on(browser_install::prepare_release_extension(&data, browser)) {
+            Ok(downloaded) => {
+                package_source = if downloaded {
+                    "Downloaded, verified and unpacked automatically"
+                } else {
+                    "Verified release package already prepared"
+                }
+                .into()
+            }
+            Err(error) => {
+                package_warning = Some(format!(
+                    "Release download unavailable. Using the trusted files bundled with Rivet. {error}"
+                ))
+            }
+        }
+    }
     let identifier = format!("{}:{}", identifier, distribution.extension_id(browser));
     Ok(Report {
         browser,
@@ -400,5 +463,133 @@ fn check(selected: Option<Browser>) -> anyhow::Result<Report> {
         install_requested: false,
         isolated,
         started,
+        package_source,
+        package_warning,
     })
+}
+
+struct Palette {
+    background: egui::Color32,
+    surface: egui::Color32,
+    border: egui::Color32,
+    ink: egui::Color32,
+    muted: egui::Color32,
+    accent: egui::Color32,
+    tint: egui::Color32,
+    success: egui::Color32,
+}
+impl Palette {
+    fn new(dark: bool) -> Self {
+        let color = |r, g, b| egui::Color32::from_rgb(r, g, b);
+        if dark {
+            Self {
+                background: color(12, 20, 34),
+                surface: color(20, 31, 49),
+                border: color(40, 57, 78),
+                ink: color(230, 238, 249),
+                muted: color(154, 174, 198),
+                accent: color(92, 153, 255),
+                tint: color(28, 50, 82),
+                success: color(70, 202, 156),
+            }
+        } else {
+            Self {
+                background: color(242, 246, 252),
+                surface: egui::Color32::WHITE,
+                border: color(223, 231, 242),
+                ink: color(24, 42, 68),
+                muted: color(99, 118, 143),
+                accent: color(38, 105, 230),
+                tint: color(237, 243, 255),
+                success: color(27, 155, 116),
+            }
+        }
+    }
+}
+fn semibold(size: f32) -> egui::FontId {
+    egui::FontId::new(size, egui::FontFamily::Name("Rivet Strong".into()))
+}
+fn primary(ui: &mut egui::Ui, p: &Palette, label: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(
+            egui::RichText::new(label)
+                .color(if ui.visuals().dark_mode {
+                    egui::Color32::from_rgb(12, 20, 34)
+                } else {
+                    egui::Color32::WHITE
+                })
+                .font(semibold(13.)),
+        )
+        .fill(p.accent)
+        .min_size(egui::vec2(186., 42.))
+        .corner_radius(9),
+    )
+}
+fn secondary(ui: &mut egui::Ui, label: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(label)
+            .min_size(egui::vec2(160., 42.))
+            .corner_radius(9),
+    )
+}
+fn step(
+    ui: &mut egui::Ui,
+    p: &Palette,
+    number: u8,
+    title: &str,
+    description: &str,
+    done: bool,
+    active: bool,
+) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui(egui::vec2(34., 42.), |ui| {
+            ui.add_space(6.);
+            if done {
+                ui.add(widgets::image("circle-check", 24., p.success));
+            } else if active {
+                ui.add(egui::Spinner::new().size(23.).color(p.accent));
+            } else {
+                ui.label(
+                    egui::RichText::new(format!("{number:02}"))
+                        .font(semibold(17.))
+                        .color(p.muted),
+                );
+            }
+        });
+        ui.vertical(|ui| {
+            ui.add_space(3.);
+            ui.label(egui::RichText::new(title).font(semibold(13.5)).color(p.ink));
+            ui.label(egui::RichText::new(description).size(11.5).color(p.muted));
+        });
+    });
+}
+fn callout(ui: &mut egui::Ui, p: &Palette, title: &str, description: &str) {
+    egui::Frame::new()
+        .fill(p.tint)
+        .corner_radius(12)
+        .inner_margin(16)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(egui::RichText::new(title).font(semibold(13.)).color(p.ink));
+            ui.add_space(4.);
+            ui.label(egui::RichText::new(description).size(12.).color(p.muted));
+        });
+}
+fn open_setup(report: &Report) -> String {
+    let url = report
+        .listing
+        .as_ref()
+        .map(|l| l.url.as_str())
+        .unwrap_or_else(|| management_page(report.browser));
+    if report.listing.is_none()
+        && report.inspection.installed.is_empty()
+        && browser_install::open_folder(&report.extension).is_err()
+    {
+        return "The prepared folder could not be opened. Its path is under Connection details."
+            .into();
+    }
+    match browser_install::open_browser(report.browser, url) {
+        Ok(()) => "Browser setup opened. Rivet will detect the connection automatically.".into(),
+        Err(_) => "Could not open the browser. Check that it is installed and try again.".into(),
+    }
 }

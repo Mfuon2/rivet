@@ -33,7 +33,7 @@ def windows_build_environment():
     vswhere = Path(os.environ["ProgramFiles(x86)"]) / "Microsoft Visual Studio/Installer/vswhere.exe"
     install = subprocess.check_output([str(vswhere), "-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"], text=True).strip()
     vcvars = Path(install) / "VC/Auxiliary/Build/vcvars64.bat"
-    values = subprocess.check_output(["cmd.exe", "/d", "/s", "/c", f'""{vcvars}" >nul && set"'], text=True)
+    values = subprocess.check_output(f'cmd.exe /d /s /c ""{vcvars}" >nul && set"', text=True)
     env = os.environ.copy()
     for line in values.splitlines():
         key, sep, value = line.partition("=")

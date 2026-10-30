@@ -61,6 +61,8 @@ jobs:
       - name: Windows installer tool
         if: runner.os == 'Windows'
         run: choco install innosetup make --yes --no-progress
+      - name: Build and verify bundled media tools
+        run: python scripts/prepare_media_tools.py
       - name: Stamp release version
         run: python scripts/publish.py stamp "${{ needs.plan.outputs.version }}"
       - name: Python packaging and signature tests
@@ -77,8 +79,6 @@ jobs:
         run: cargo build --release --workspace --locked
       - name: Test actual release binaries
         run: python scripts/smoke.py --binary-dir target/release
-      - name: Build and verify bundled media tools
-        run: python scripts/prepare_media_tools.py
       - name: Package installers and extensions
         run: python scripts/release.py package --installer
       - name: Inspect packages and exercise Windows installation

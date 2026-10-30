@@ -36,6 +36,19 @@ jobs:
       - run: node --check browser/shared/popup.js
       - run: node --test browser/tests/background.test.cjs
       - run: python scripts/package_browser.py
+  media:
+    name: Bundled media tools (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
       - name: Windows media build prerequisites
         if: runner.os == 'Windows'
         run: choco install make --yes --no-progress

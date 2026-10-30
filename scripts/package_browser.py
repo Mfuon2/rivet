@@ -37,7 +37,7 @@ for browser in ("chromium", "firefox"):
     json.loads((output / "manifest.json").read_text())
     # Fixed metadata and stored entries make extension ZIPs identical across OS builds.
     with zipfile.ZipFile(root / "dist" / f"rivet-{browser}.zip", "w") as archive:
-        for source in sorted(output.rglob("*")):
+        for source in sorted(output.rglob("*"), key=lambda path: path.relative_to(output).as_posix()):
             if source.is_file():
                 entry = zipfile.ZipInfo(source.relative_to(output).as_posix(), (1980, 1, 1, 0, 0, 0))
                 entry.create_system = 3
@@ -55,7 +55,7 @@ if args.chrome_store:
     store_manifest.pop("update_url", None)
     # Use an allowlisted source directory so no local files or development metadata leak in.
     with zipfile.ZipFile(root / "dist/rivet-chrome-store.zip", "w") as archive:
-        for source in sorted((root / "dist/chromium").rglob("*")):
+        for source in sorted((root / "dist/chromium").rglob("*"), key=lambda path: path.relative_to(root / "dist/chromium").as_posix()):
             if not source.is_file():
                 continue
             name = source.relative_to(root / "dist/chromium").as_posix()

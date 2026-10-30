@@ -64,6 +64,10 @@ class ReleaseTests(unittest.TestCase):
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
         second = [(release.ROOT / f"dist/rivet-{browser}.zip").read_bytes() for browser in ("chromium", "firefox")]
         self.assertEqual(first, second)
+        import zipfile
+        for browser in ("chromium", "firefox"):
+            with zipfile.ZipFile(release.ROOT / f"dist/rivet-{browser}.zip") as archive:
+                self.assertEqual(archive.namelist(), sorted(archive.namelist()), "Archive names must use platform-independent lexical ordering")
 
     def test_chrome_store_upload_omits_development_key_and_keeps_assets(self):
         import json
@@ -71,6 +75,7 @@ class ReleaseTests(unittest.TestCase):
         subprocess.run([__import__("sys").executable, str(release.ROOT / "scripts/package_browser.py"), "--chrome-store"], check=True, stdout=subprocess.DEVNULL)
         with zipfile.ZipFile(release.ROOT / "dist/rivet-chrome-store.zip") as archive:
             manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(archive.namelist(), sorted(archive.namelist()), "Store archive ordering must match on Windows and POSIX")
             self.assertNotIn("key", manifest)
             self.assertNotIn("update_url", manifest)
             self.assertEqual(manifest["manifest_version"], 3)

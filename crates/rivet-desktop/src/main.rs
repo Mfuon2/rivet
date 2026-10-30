@@ -259,6 +259,7 @@ impl App {
             prefs.columns.insert(0, Field::Name);
         }
         egui_extras::install_image_loaders(&cc.egui_ctx);
+        install_fonts(&cc.egui_ctx);
         theme(&cc.egui_ctx, prefs.dark);
         let queue = Queue::open(Queue::default_path()?)?;
         let jobs = queue.list()?;
@@ -646,6 +647,87 @@ impl App {
     }
 }
 
+fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        "Poppins".into(),
+        egui::FontData::from_static(include_bytes!("../../../assets/fonts/Poppins-Regular.ttf"))
+            .into(),
+    );
+    fonts.font_data.insert(
+        "Poppins Semibold".into(),
+        egui::FontData::from_static(include_bytes!("../../../assets/fonts/Poppins-SemiBold.ttf"))
+            .into(),
+    );
+    let mut roots = Vec::new();
+    if let Some(dirs) = directories::ProjectDirs::from("org", "rivet", "Rivet") {
+        roots.push(dirs.data_dir().join("fonts"));
+    }
+    if let Some(home) = directories::UserDirs::new() {
+        roots.push(home.home_dir().join("Library/Fonts"));
+        roots.push(home.home_dir().join(".local/share/fonts"));
+    }
+    if let Some(windows) = std::env::var_os("WINDIR") {
+        roots.push(PathBuf::from(windows).join("Fonts"));
+    }
+    roots.push(PathBuf::from("/Library/Fonts"));
+    let mut regular = false;
+    let mut strong = false;
+    for (family, names) in [
+        ("Segoe UI", &["segoeui.ttf", "Segoe UI.ttf"][..]),
+        (
+            "Segoe UI Semibold",
+            &["seguisb.ttf", "segoeuib.ttf", "Segoe UI Semibold.ttf"][..],
+        ),
+    ] {
+        for path in roots
+            .iter()
+            .flat_map(|root| names.iter().map(move |name| root.join(name)))
+        {
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
+            if meta.len() > 5 * 1024 * 1024 {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(path) else {
+                continue;
+            };
+            if ttf_parser::Face::parse(&bytes, 0).is_err() {
+                continue;
+            }
+            fonts
+                .font_data
+                .insert(family.into(), egui::FontData::from_owned(bytes).into());
+            if family == "Segoe UI" {
+                regular = true;
+            } else {
+                strong = true;
+            }
+            break;
+        }
+    }
+    let normal = if regular { "Segoe UI" } else { "Poppins" };
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(family)
+            .or_default()
+            .insert(0, normal.into());
+    }
+    let heading = if strong {
+        "Segoe UI Semibold"
+    } else if regular {
+        "Segoe UI"
+    } else {
+        "Poppins Semibold"
+    };
+    fonts.families.insert(
+        egui::FontFamily::Name("Rivet Strong".into()),
+        vec![heading.into(), normal.into()],
+    );
+    ctx.set_fonts(fonts);
+}
 fn theme(ctx: &egui::Context, dark: bool) {
     let t = if dark {
         egui::Theme::Dark
@@ -684,10 +766,12 @@ fn theme(ctx: &egui::Context, dark: bool) {
         s.spacing.button_padding = egui::vec2(9., 4.);
         s.spacing.window_margin = egui::Margin::same(12);
         for t in [egui::TextStyle::Body, egui::TextStyle::Button] {
-            s.text_styles.insert(t, egui::FontId::proportional(12.5));
+            s.text_styles.insert(t, egui::FontId::proportional(14.));
         }
-        s.text_styles
-            .insert(egui::TextStyle::Heading, egui::FontId::proportional(16.));
+        s.text_styles.insert(
+            egui::TextStyle::Heading,
+            egui::FontId::new(22., egui::FontFamily::Name("Rivet Strong".into())),
+        );
     });
 }
 impl eframe::App for App {

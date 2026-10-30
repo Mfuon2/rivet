@@ -157,6 +157,7 @@ def main():
                 native("press", process.pid, label)
                 time.sleep(0.4)
             subprocess.run(["pbcopy"], input="rivet-native-test-sentinel", text=True, check=True)
+            click("Connection details")
             click("Development setup")
             click("Copy browser setup address")
             address = subprocess.check_output(["pbpaste"], text=True)
@@ -164,10 +165,11 @@ def main():
             click("Copy extension folder")
             path = subprocess.check_output(["pbpaste"], text=True)
             assert Path(path).is_dir() and Path(path).resolve().is_relative_to(folder.resolve()), f"System clipboard did not receive the prepared extension path (still address: {path == address})"
-            click("Connection details")
             click("Check again")
             time.sleep(1)
             if not any(row["text"] == "Copy browser setup address" for row in text()):
+                if not any(row["text"] == "Development setup" for row in text()):
+                    click("Connection details")
                 click("Development setup")
             assert any(row["text"] == "Copy browser setup address" for row in text()), "Setup did not return after rechecking"
             click("Continue to Rivet")

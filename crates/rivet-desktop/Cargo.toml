@@ -15,6 +15,7 @@ serde_json.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 rivet-core = { path = "../rivet-core" }
 tokio.workspace = true
+ttf-parser = "0.25"
 
 
 [target.'cfg(windows)'.build-dependencies]

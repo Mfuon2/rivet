@@ -494,3 +494,129 @@ pub fn connection_confirmed(
             && (time >= started || inspection.installed.iter().any(|e| e.enabled == Some(true)))
     })
 }
+
+/// Fetch the matching extension through the authenticated release channel. Archives exist
+/// only in private temporary storage; the installed extension lives at a stable data path.
+pub async fn prepare_release_extension(data: &Path, browser: Browser) -> Result<bool> {
+    let version = env!("CARGO_PKG_VERSION");
+    let kind = if browser == Browser::Firefox {
+        "firefox"
+    } else {
+        "chromium"
+    };
+    let receipt = data.join(format!("extension-package-{kind}.json"));
+    if std::fs::read(&receipt)
+        .ok()
+        .and_then(|v| serde_json::from_slice::<Value>(&v).ok())
+        .is_some_and(|v| v["version"].as_str() == Some(version))
+    {
+        return Ok(false);
+    }
+    let release = crate::update::release(version).await?;
+    let name = format!("rivet-{version}-extension-{kind}.zip");
+    ensure!(
+        release.asset(&name)?.size <= 8 * 1024 * 1024,
+        "Extension archive is too large"
+    );
+    let temporary = tempfile::Builder::new()
+        .prefix("rivet-browser-setup-")
+        .tempdir()?;
+    let package = crate::update::verified_asset(
+        &release,
+        &name,
+        temporary.path(),
+        &crate::CancellationToken::new(),
+        |_, _| {},
+    )
+    .await?;
+    let files = validated_extension_archive(&package, browser, version)?;
+    let destination = data.join("browser-extensions").join(kind);
+    for (name, bytes) in files {
+        browser_setup::write_if_changed(&destination.join(name), &bytes)?;
+    }
+    browser_setup::prepare_personal_font(data, &destination)?;
+    browser_setup::write_if_changed(
+        &receipt,
+        &serde_json::to_vec(
+            &serde_json::json!({"version":version,"source":"authenticated-github-release"}),
+        )?,
+    )?;
+    Ok(true)
+}
+/// Validation completes before any installed file is changed.
+pub fn validated_extension_archive(
+    archive: &Path,
+    browser: Browser,
+    version: &str,
+) -> Result<std::collections::BTreeMap<String, Vec<u8>>> {
+    use anyhow::Context;
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(archive)?)?;
+    let allowed: std::collections::BTreeSet<_> = browser_setup::asset_names().collect();
+    ensure!(
+        zip.len() == allowed.len(),
+        "Extension archive has missing or unexpected entries"
+    );
+    let mut result = std::collections::BTreeMap::new();
+    let mut total = 0;
+    for index in 0..zip.len() {
+        let entry = zip.by_index(index)?;
+        let name = entry.name()?.into_owned();
+        ensure!(
+            entry.enclosed_name().is_some() && allowed.contains(name.as_str()),
+            "Unsafe or unexpected extension filename"
+        );
+        ensure!(
+            entry
+                .unix_mode()
+                .is_none_or(|mode| mode & 0o170000 != 0o120000),
+            "Extension archive contains a symbolic link"
+        );
+        ensure!(
+            entry.size() <= 4 * 1024 * 1024,
+            "Extension archive entry is too large"
+        );
+        let mut bytes = Vec::new();
+        entry.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
+        total += bytes.len();
+        ensure!(
+            bytes.len() <= 4 * 1024 * 1024 && total <= 16 * 1024 * 1024,
+            "Extension archive exceeds its size limit"
+        );
+        ensure!(
+            result.insert(name, bytes).is_none(),
+            "Extension archive has duplicate entries"
+        );
+    }
+    ensure!(
+        result.len() == allowed.len(),
+        "Extension archive has missing entries"
+    );
+    let manifest: Value = serde_json::from_slice(
+        result
+            .get("manifest.json")
+            .context("Extension manifest is missing")?,
+    )?;
+    ensure!(
+        manifest["version"].as_str() == Some(version),
+        "Extension package version does not match this application"
+    );
+    let distribution = Distribution::bundled()?;
+    if browser == Browser::Firefox {
+        ensure!(
+            manifest
+                .pointer("/browser_specific_settings/gecko/id")
+                .and_then(Value::as_str)
+                == Some(&distribution.firefox_extension_id),
+            "Unexpected Firefox extension identity"
+        );
+    } else {
+        let bundled: Value =
+            serde_json::from_slice(include_bytes!("../../../browser/chromium/manifest.json"))?;
+        ensure!(
+            manifest["key"] == bundled["key"],
+            "Unexpected Chromium extension identity"
+        );
+    }
+    Ok(result)
+}

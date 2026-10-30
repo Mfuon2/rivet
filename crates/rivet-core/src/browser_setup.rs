@@ -309,7 +309,23 @@ pub fn register(
     }
     Ok(path)
 }
-const ASSETS: [(&str, &[u8]); 14] = [
+const ASSETS: [(&str, &[u8]); 18] = [
+    (
+        "user-font.css",
+        include_bytes!("../../../browser/shared/user-font.css"),
+    ),
+    (
+        "Poppins-Regular.ttf",
+        include_bytes!("../../../assets/fonts/Poppins-Regular.ttf"),
+    ),
+    (
+        "Poppins-SemiBold.ttf",
+        include_bytes!("../../../assets/fonts/Poppins-SemiBold.ttf"),
+    ),
+    (
+        "POPPINS-LICENSE.txt",
+        include_bytes!("../../../assets/fonts/OFL.txt"),
+    ),
     (
         "setup.html",
         include_bytes!("../../../browser/shared/setup.html"),
@@ -364,6 +380,9 @@ const ASSETS: [(&str, &[u8]); 14] = [
         include_bytes!("../../../assets/branding/icons/icon-128.png"),
     ),
 ];
+pub(crate) fn asset_names() -> impl Iterator<Item = &'static str> {
+    ASSETS.iter().map(|(name, _)| *name)
+}
 pub fn prepare_extension(data: &Path, browser: Browser) -> Result<PathBuf> {
     let firefox = browser == Browser::Firefox;
     let path = data
@@ -381,7 +400,24 @@ pub fn prepare_extension(data: &Path, browser: Browser) -> Result<PathBuf> {
         };
         write_if_changed(&path.join(name), bytes)?;
     }
+    prepare_personal_font(data, &path)?;
     Ok(path)
+}
+
+pub(crate) fn prepare_personal_font(_data: &Path, extension: &Path) -> Result<()> {
+    let Some(dirs) = directories::ProjectDirs::from("org", "rivet", "Rivet") else {
+        return Ok(());
+    };
+    let source = dirs.data_dir().join("fonts/segoeui.woff");
+    if let Ok(meta) = std::fs::metadata(&source)
+        && meta.len() < 5 * 1024 * 1024
+        && let Ok(bytes) = std::fs::read(source)
+        && bytes.starts_with(b"wOFF")
+    {
+        write_if_changed(&extension.join("segoeui.woff"), &bytes)?;
+        write_if_changed(&extension.join("user-font.css"), b"@font-face{font-family:'Segoe UI';src:url('segoeui.woff') format('woff');font-weight:400;font-display:swap}\n")?;
+    }
+    Ok(())
 }
 #[derive(Serialize, Deserialize)]
 pub struct ConnectionReceipt {

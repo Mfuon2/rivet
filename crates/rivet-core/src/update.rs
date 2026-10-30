@@ -320,6 +320,82 @@ pub struct Prepared {
     pub directory: PathBuf,
     pub lock: File,
 }
+/// Fetch an exact published release without assuming GitHub's stable-only latest endpoint.
+pub async fn release(version: &str) -> Result<Release> {
+    Version::parse(version)?;
+    let url = format!("{}/tags/v{version}", RELEASES.split('?').next().unwrap());
+    let release: Release =
+        serde_json::from_slice(&bounded(&client(20)?, &url, 2 * 1024 * 1024).await?)?;
+    ensure!(
+        !release.draft && release.tag_name == format!("v{version}"),
+        "Release is not published"
+    );
+    Ok(release)
+}
+/// Download an asset into a private staging directory and authenticate it with the pinned key.
+/// The manifest/signature are retained beside it for a later independent install-time check.
+pub async fn verified_asset(
+    release: &Release,
+    name: &str,
+    directory: &Path,
+    cancel: &CancellationToken,
+    progress: impl Fn(u64, u64),
+) -> Result<PathBuf> {
+    let asset = release.asset(name)?;
+    let http = client(if asset.size > 8 * 1024 * 1024 {
+        300
+    } else {
+        60
+    })?;
+    let manifest = cancellable_metadata(
+        &http,
+        &release.asset("SHA256SUMS")?.browser_download_url,
+        1024 * 1024,
+        cancel,
+    )
+    .await?;
+    let signature = cancellable_metadata(
+        &http,
+        &release.asset("SHA256SUMS.minisig")?.browser_download_url,
+        8192,
+        cancel,
+    )
+    .await?;
+    let hashes = authenticated_checksums(&manifest, std::str::from_utf8(&signature)?)?;
+    let hash = hashes
+        .get(name)
+        .context("Package missing from signed checksums")?;
+    let partial = directory.join("package.part");
+    let package = directory.join(name);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&partial)?;
+    let response = tokio::select! { _=cancel.cancelled()=>bail!("Download cancelled"), result=http.get(&asset.browser_download_url).send()=>result? };
+    let mut response = response.error_for_status()?;
+    let mut downloaded = 0;
+    loop {
+        let chunk = tokio::select! { _=cancel.cancelled()=>bail!("Download cancelled"), result=response.chunk()=>result? };
+        let Some(chunk) = chunk else {
+            break;
+        };
+        downloaded += chunk.len() as u64;
+        ensure!(
+            downloaded <= asset.size,
+            "Download exceeded its expected size"
+        );
+        file.write_all(&chunk)?;
+        progress(downloaded, asset.size);
+    }
+    ensure!(downloaded == asset.size, "Download was incomplete");
+    file.sync_all()?;
+    drop(file);
+    verify_file(&partial, hash)?;
+    fs::rename(partial, &package)?;
+    fs::write(directory.join("SHA256SUMS"), manifest)?;
+    fs::write(directory.join("SHA256SUMS.minisig"), signature)?;
+    Ok(package)
+}
 pub async fn download(
     release: Release,
     installation: Installation,
@@ -330,27 +406,7 @@ pub async fn download(
         std::env::var_os("RIVET_SETUP_ROOT").is_none(),
         "Update installation is disabled in isolated preview mode"
     );
-    let package_name = installation.package_name(release.version())?;
-    let asset = release.asset(&package_name)?.clone();
-    let http = client(300)?;
-    let manifest = cancellable_metadata(
-        &http,
-        &release.asset("SHA256SUMS")?.browser_download_url,
-        1024 * 1024,
-        &cancel,
-    )
-    .await?;
-    let signature = cancellable_metadata(
-        &http,
-        &release.asset("SHA256SUMS.minisig")?.browser_download_url,
-        8192,
-        &cancel,
-    )
-    .await?;
-    let hashes = authenticated_checksums(&manifest, std::str::from_utf8(&signature)?)?;
-    let hash = hashes
-        .get(&package_name)
-        .context("Package missing from signed checksums")?;
+    let name = installation.package_name(release.version())?;
     let directory = cache_dir()?.join(uuid::Uuid::new_v4().to_string());
     fs::create_dir_all(&directory)?;
     #[cfg(unix)]
@@ -358,24 +414,31 @@ pub async fn download(
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))?;
     }
-    let result=async {
-        let lock=OpenOptions::new().read(true).write(true).create_new(true).open(directory.join("app.lock"))?;lock.try_lock_exclusive()?;
-        let partial=directory.join("package.part"); let package=directory.join(&package_name);
-        let mut file=OpenOptions::new().write(true).create_new(true).open(&partial)?;
-        let response=tokio::select! { _=cancel.cancelled()=>bail!("Update download cancelled"), result=http.get(&asset.browser_download_url).send()=>result? };
-        let mut response=response.error_for_status()?;
-        let mut downloaded=0;
-        loop {
-            let chunk=tokio::select! { _=cancel.cancelled()=>bail!("Update download cancelled"), result=response.chunk()=>result? };
-            let Some(chunk)=chunk else {break;}; downloaded+=chunk.len() as u64;
-            ensure!(downloaded<=asset.size,"Update download exceeded its expected size"); file.write_all(&chunk)?;progress(downloaded,asset.size);
-        }
-        ensure!(downloaded==asset.size,"Update download was incomplete");file.sync_all()?;drop(file);
-        verify_file(&partial,hash)?; fs::rename(partial,&package)?;
-        fs::write(directory.join("SHA256SUMS"),manifest)?;fs::write(directory.join("SHA256SUMS.minisig"),signature)?;
-        let plan=directory.join("plan.json"); fs::write(&plan,serde_json::to_vec(&Plan{parent_pid:std::process::id(),release,installation,package})?)?;
-        Ok(Prepared{plan,directory:directory.clone(),lock})
-    }.await;
+    let result = async {
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(directory.join("app.lock"))?;
+        lock.try_lock_exclusive()?;
+        let package = verified_asset(&release, &name, &directory, &cancel, progress).await?;
+        let plan = directory.join("plan.json");
+        fs::write(
+            &plan,
+            serde_json::to_vec(&Plan {
+                parent_pid: std::process::id(),
+                release,
+                installation,
+                package,
+            })?,
+        )?;
+        Ok(Prepared {
+            plan,
+            directory: directory.clone(),
+            lock,
+        })
+    }
+    .await;
     if result.is_err() {
         let _ = fs::remove_dir_all(&directory);
     }

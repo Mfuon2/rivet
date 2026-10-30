@@ -100,6 +100,13 @@ impl App {
                             " · MIT open source"
                         ));
                         ui.label("No activation. No telemetry.");
+                        ui.collapsing("Poppins font license", |ui| {
+                            egui::ScrollArea::vertical()
+                                .max_height(240.)
+                                .show(ui, |ui| {
+                                    ui.label(include_str!("../../../assets/fonts/OFL.txt"));
+                                });
+                        });
                         ui.collapsing("Lucide icon license", |ui| {
                             egui::ScrollArea::vertical()
                                 .max_height(240.)

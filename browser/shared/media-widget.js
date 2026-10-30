@@ -8,6 +8,7 @@
   const dismissed = new WeakSet();
   const protectedMedia = new WeakSet();
   let enabled = false;
+  let fontsRequested = false;
   let frame = 0;
   let observer;
 
@@ -71,10 +72,23 @@
     if (!enabled || widgets.has(media) || dismissed.has(media) || widgets.size >= 20) return;
     const host = document.createElement("div");
     host.dataset.rivetMediaWidget = "";
-    host.style.cssText = "all:initial;position:fixed!important;z-index:2147483647!important;width:266px!important;font:12px system-ui,sans-serif!important;color:#20334b!important;";
+    host.style.cssText = "all:initial;position:fixed!important;z-index:2147483647!important;width:266px!important;font:12px \"Segoe UI\",Poppins,sans-serif!important;color:#20334b!important;";
+    if (!fontsRequested) {
+      fontsRequested = true;
+      fetch(api.runtime.getURL("user-font.css")).then(response => response.text()).then(css => {
+        if (css.includes("segoeui.woff")) {
+          const face = new FontFace("Segoe UI", `url("${api.runtime.getURL("segoeui.woff")}")`, {weight:"400"});
+          face.load().then(loaded => document.fonts.add(loaded)).catch(() => {});
+        }
+      }).catch(() => {});
+      for (const [file, weight] of [["Poppins-Regular.ttf", "400"], ["Poppins-SemiBold.ttf", "600"]]) {
+        const font = new FontFace("Poppins", `url("${api.runtime.getURL(file)}")`, {weight});
+        font.load().then(loaded => document.fonts.add(loaded)).catch(() => {});
+      }
+    }
     const shadow = host.attachShadow({mode: "closed"});
     const style = document.createElement("style");
-    style.textContent = `:host{font:12px system-ui,sans-serif;color:#20334b}*{box-sizing:border-box}.bar{display:flex;justify-content:flex-end;gap:3px}button{font:600 12px system-ui,sans-serif;border:1px solid #b9d0e5;border-radius:5px;background:#f4f8fd;color:#174b78;padding:7px 10px;cursor:pointer;box-shadow:0 2px 7px #0003}button:focus-visible{outline:2px solid #1687d0;outline-offset:2px}button:disabled{opacity:.6}.panel{margin-top:5px;background:#f7faff;border:1px solid #b9d0e5;border-radius:7px;padding:10px;box-shadow:0 3px 12px #0004}.panel[hidden]{display:none}.links{max-height:180px;overflow:auto}.links button{display:block;width:100%;margin-bottom:5px;overflow-wrap:anywhere;font-weight:400;text-align:left;box-shadow:none}.status{margin:6px 0 0;line-height:1.5;color:#455c73}.close{padding:7px 9px}`;
+    style.textContent = `:host{font:12px "Segoe UI",Poppins,sans-serif;color:#20334b}*{box-sizing:border-box}.bar{display:flex;justify-content:flex-end;gap:3px}button{font:600 12px "Segoe UI",Poppins,sans-serif;border:1px solid #b9d0e5;border-radius:5px;background:#f4f8fd;color:#174b78;padding:7px 10px;cursor:pointer;box-shadow:0 2px 7px #0003}button:focus-visible{outline:2px solid #1687d0;outline-offset:2px}button:disabled{opacity:.6}.panel{margin-top:5px;background:#f7faff;border:1px solid #b9d0e5;border-radius:7px;padding:10px;box-shadow:0 3px 12px #0004}.panel[hidden]{display:none}.links{max-height:180px;overflow:auto}.links button{display:block;width:100%;margin-bottom:5px;overflow-wrap:anywhere;font-weight:400;text-align:left;box-shadow:none}.status{margin:6px 0 0;line-height:1.5;color:#455c73}.close{padding:7px 9px}`;
     const bar = document.createElement("div"); bar.className = "bar";
     const trigger = document.createElement("button"); trigger.type = "button"; trigger.textContent = "↓ Download with Rivet";
     trigger.setAttribute("aria-expanded", "false");

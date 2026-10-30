@@ -43,6 +43,8 @@ def windows_build_environment():
                 if existing.lower() == key.lower():
                     del env[existing]
             env[key] = value
+    tools = next(value for key, value in env.items() if key.lower() == "vctoolsinstalldir")
+    env["RIVET_MSVC_BIN"] = str(Path(tools) / "bin/Hostx64/x64")
     env["MSYS_NO_PATHCONV"] = "1"
     return env
 
@@ -75,8 +77,16 @@ def prepare(output):
         bash = str(Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe")
     else:
         bash = "bash"
-    subprocess.run([bash, "./configure", *options], cwd=source, env=env, check=True)
-    subprocess.run([bash, "-c", "export PATH=/usr/bin:$PATH; make -j " + str(min(os.cpu_count() or 2, 8))], cwd=source, env=env, check=True)
+    # Git Bash has its own link.exe. Put the MSVC linker ahead of that utility.
+    prefix = 'export PATH="$(cygpath -u "$RIVET_MSVC_BIN"):/usr/bin:$PATH"; ' if os.name == "nt" else ""
+    try:
+        subprocess.run([bash, "-c", prefix + 'exec bash ./configure "$@"', "rivet-configure", *options], cwd=source, env=env, check=True)
+    except subprocess.CalledProcessError:
+        log = source / "ffbuild/config.log"
+        if log.exists():
+            print(log.read_text(errors="replace")[-12000:], flush=True)
+        raise
+    subprocess.run([bash, "-c", prefix + "make -j " + str(min(os.cpu_count() or 2, 8))], cwd=source, env=env, check=True)
     for name in ["ffmpeg", "ffprobe"]:
         dest = output / (name + suffix)
         shutil.copy2(source / (name + suffix), dest)

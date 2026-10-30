@@ -23,6 +23,8 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    ApplyUpdate { plan: PathBuf },
     /// Download immediately; Ctrl-C preserves safely resumable parts.
     Get {
         url: String,
@@ -82,6 +84,9 @@ async fn main() {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
+    if let Command::ApplyUpdate { plan } = &args.command {
+        return rivet_core::update::apply(plan);
+    }
     if let Command::HostManifest {
         executable,
         extension_id,
@@ -191,7 +196,9 @@ async fn run() -> Result<()> {
                 tokio::select! { _ = cancel.cancelled() => break, _ = tokio::time::sleep(Duration::from_secs(1)) => {} }
             }
         }
-        Command::NativeHost { .. } | Command::HostManifest { .. } => unreachable!(),
+        Command::NativeHost { .. } | Command::HostManifest { .. } | Command::ApplyUpdate { .. } => {
+            unreachable!()
+        }
     }
     Ok(())
 }

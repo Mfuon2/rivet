@@ -81,6 +81,10 @@ impl App {
                         }
                     });
                     ui.menu_button("Help", |ui| {
+                        if ui.button("Check for updates…").clicked() {
+                            action = Some(Action::Update);
+                            ui.close();
+                        }
                         if ui.button("About Rivet…").clicked() {
                             action = Some(Action::About);
                             ui.close();

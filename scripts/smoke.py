@@ -60,6 +60,8 @@ with tempfile.TemporaryDirectory(prefix="rivet-smoke-") as temp:
         assert Path(browser_job["request"]["destination"]).parent == temp / "browser-downloads"
         assert not Path(browser_job["request"]["destination"]).exists()
         manifest = json.loads(cli("host-manifest", "--executable", str(host), "--extension-id", "a" * 32))
+        rejected = subprocess.run([str(rivet), "apply-update", str(temp / "nonexistent-plan.json")], env=dict(env, RIVET_SETUP_ROOT=str(temp / "isolated-home")), capture_output=True, text=True, timeout=10)
+        assert rejected.returncode != 0 and "isolated preview mode" in rejected.stderr
         # Windows canonical paths may include the extended-length prefix; compare file identity.
         assert Path(manifest["path"]).samefile(host) and manifest["name"] == "org.rivet.downloads"
         result = {"cli_transfer": "passed", "durable_queue_worker": "passed", "native_host_framing_and_queue_only": "passed", "host_manifest": "passed", "fixture_sha256": digest, "all_network_traffic": "local HTTP fixture"}

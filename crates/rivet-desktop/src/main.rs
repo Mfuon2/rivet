@@ -2,6 +2,7 @@
 mod browser;
 mod startup;
 mod transfer;
+mod updater;
 mod view;
 mod widgets;
 use eframe::egui::{self, Color32};
@@ -153,6 +154,7 @@ enum Action {
     Properties,
     Progress,
     About,
+    Update,
     Browser,
     SelectAll,
 }
@@ -164,6 +166,7 @@ struct Active {
     rate: f64,
 }
 struct App {
+    updater: updater::Updater,
     startup: startup::Startup,
     queue: Queue,
     runtime: tokio::runtime::Runtime,
@@ -266,6 +269,7 @@ impl App {
         };
         let (tx, rx) = mpsc::channel();
         Ok(Self {
+            updater: updater::Updater::new(),
             startup: startup::Startup::new(false, prefs.browser_setup_deferred),
             queue,
             runtime,
@@ -468,6 +472,7 @@ impl App {
             }
             Action::Browser => self.show_browser = true,
             Action::About => self.show_about = true,
+            Action::Update => self.updater.check(true),
             Action::SelectAll => {
                 self.selected = self.visible().iter().map(|j| j.id.clone()).collect()
             }
@@ -693,11 +698,13 @@ impl eframe::App for App {
             .startup
             .render(ui, &mut self.prefs, self.active.is_empty())
         {
+            self.updater.render(&ctx, self.active.is_empty());
             ctx.request_repaint_after(Duration::from_millis(200));
             return;
         }
         self.render(ui);
         self.dialogs(&ctx);
+        self.updater.render(&ctx, self.active.is_empty());
         ctx.request_repaint_after(Duration::from_millis(200));
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

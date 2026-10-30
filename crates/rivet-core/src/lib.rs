@@ -4,6 +4,7 @@ pub mod download;
 pub mod native;
 pub mod progress;
 pub mod queue;
+pub mod update;
 pub mod worker;
 
 pub use download::{DownloadRequest, DownloadResult, Engine, Progress};

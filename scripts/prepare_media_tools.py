@@ -46,6 +46,8 @@ def windows_build_environment():
     tools = next(value for key, value in env.items() if key.lower() == "vctoolsinstalldir")
     env["RIVET_MSVC_BIN"] = str(Path(tools) / "bin/Hostx64/x64")
     env["MSYS_NO_PATHCONV"] = "1"
+    env["MSYS2_ARG_CONV_EXCL"] = "*"
+    env["MSYSTEM"] = "MSYS"
     return env
 
 
@@ -74,7 +76,7 @@ def prepare(output):
     if os.name == "nt":
         env = windows_build_environment()
         options += ["--toolchain=msvc", "--cc=cl.exe", "--ld=link.exe"]
-        bash = str(Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe")
+        bash = str(Path(os.environ.get("RIVET_MSYS2_ROOT", "C:/msys64")) / "usr/bin/bash.exe")
     else:
         bash = "bash"
     # Git Bash has its own link.exe. Put the MSVC linker ahead of that utility.

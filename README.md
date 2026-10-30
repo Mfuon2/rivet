@@ -103,7 +103,7 @@ python3 scripts/prepare_media_tools.py
 python3 scripts/release.py package --installer
 ```
 
-Media packaging requires GNU Make and a C toolchain; the preparation script downloads checksum-pinned components and builds FFmpeg from source. For debug media downloads, set `RIVET_MEDIA_TOOLS` to the absolute path of `target/media-tools`. Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
+Media packaging requires GNU Make and a C toolchain (MSYS2 Make plus Visual Studio C++ on Windows); the preparation script downloads checksum-pinned components and builds FFmpeg from source. For debug media downloads, set `RIVET_MEDIA_TOOLS` to the absolute path of `target/media-tools`. Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
 
 ## Command-line usage
 

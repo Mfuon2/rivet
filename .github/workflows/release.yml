@@ -60,8 +60,18 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y minisign cmake libxkbcommon-dev libwayland-dev libx11-dev libxi-dev libgl1-mesa-dev libxrandr-dev libxcursor-dev libxinerama-dev
       - name: Windows installer tool
         if: runner.os == 'Windows'
-        run: choco install innosetup make --yes --no-progress
+        run: choco install innosetup --yes --no-progress
+      - name: Windows media build prerequisites
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: MSYS
+          install: make
+          path-type: inherit
       - name: Build and verify bundled media tools
+        env:
+          RIVET_MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: python scripts/prepare_media_tools.py
       - name: Stamp release version
         run: python scripts/publish.py stamp "${{ needs.plan.outputs.version }}"

@@ -51,6 +51,13 @@ jobs:
           python-version: '3.12'
       - name: Windows media build prerequisites
         if: runner.os == 'Windows'
-        run: choco install make --yes --no-progress
+        id: msys2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+        with:
+          msystem: MSYS
+          install: make
+          path-type: inherit
       - name: Build and verify bundled media tools
+        env:
+          RIVET_MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: python scripts/prepare_media_tools.py

@@ -586,8 +586,9 @@ impl App {
                                             );
                                         name_clicked = response.clicked();
                                         name_double_clicked = response.double_clicked();
-                                        response
-                                            .context_menu(|ui| self.download_menu(ui, job, action));
+                                        egui::Popup::context_menu(&response)
+                                            .id(egui::Id::unique(("download-name-menu", &job.id)))
+                                            .show(|ui| self.download_menu(ui, job, action));
                                     }
                                     Field::Queue => {
                                         ui.label(if job.status == "queued" { "Q" } else { "" });
@@ -695,7 +696,9 @@ impl App {
                             if response.secondary_clicked() && !self.selected.contains(&job.id) {
                                 self.selected = HashSet::from([job.id.clone()]);
                             }
-                            response.context_menu(|ui| self.download_menu(ui, job, action));
+                            egui::Popup::context_menu(&response)
+                                .id(egui::Id::unique(("download-row-menu", &job.id)))
+                                .show(|ui| self.download_menu(ui, job, action));
                         });
                     });
                 if jobs.is_empty() {

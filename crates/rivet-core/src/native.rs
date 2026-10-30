@@ -161,34 +161,28 @@ pub fn serve_with_actions(
         let result = (|| {
             std::fs::create_dir_all(downloads)?;
             let url = reqwest::Url::parse(&capture.url)?;
-            let suffix = uuid::Uuid::new_v4().simple().to_string();
             let name = url
                 .path_segments()
                 .and_then(|mut s| s.next_back())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("download.bin");
-            // Never accept filesystem paths, control characters, or browser-supplied output directories.
-            let name: String = name
-                .chars()
-                .take(100)
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
-                        c
-                    } else {
-                        '_'
-                    }
+            let name = crate::filenames::safe_name(
+                &percent_encoding::percent_decode_str(name).decode_utf8_lossy(),
+            );
+            let reservation = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(downloads.join(".rivet-names.lock"))?;
+            fs2::FileExt::lock_exclusive(&reservation)?;
+            let jobs = queue.list()?;
+            let destination = (1..=10000)
+                .map(|index| crate::filenames::numbered(downloads, &name, index))
+                .find(|path| {
+                    !path.exists() && !jobs.iter().any(|job| job.request.destination == *path)
                 })
-                .collect();
-            let name = name.trim_start_matches('.');
-            let destination = downloads.join(format!(
-                "{}-{}",
-                &suffix[..8],
-                if name.is_empty() {
-                    "download.bin"
-                } else {
-                    name
-                }
-            ));
+                .context("Too many downloads with this filename")?;
             let request = DownloadRequest::new(capture.url, destination);
             request.validate()?;
             if automatic {

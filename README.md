@@ -21,6 +21,8 @@ Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause a
 - Persistent queue and download history, one-time scheduling, and batch actions.
 - Compact desktop interface with categories, live progress, sortable/resizable columns, and light/dark themes.
 - Click an active download to open live segment progress, byte ranges, pause and resume controls.
+- Right-click a finished download to open/play it, reveal its folder, rename it, copy its path/source, remove its history entry or move the file to Trash. Double-click completed files to open them.
+- Media downloads retain the resolved video title; browser file links retain their filename. Duplicate names receive a number without replacing existing files.
 - Chrome, Edge, Chromium, and Firefox link handoff through a local native helper.
 - Download public YouTube videos as complete MP4 files with audio through the browser widget or extension popup.
 - Optional media-link discovery and an in-page download widget for sites you explicitly enable.
@@ -78,7 +80,7 @@ See [browser setup](docs/BROWSER.md) for detailed instructions and troubleshooti
 
 ## Video downloads
 
-Enable media discovery for the site in the extension popup and approve its browser permission. On a public YouTube video, open **Download with Rivet**, then choose **Download video with audio · MP4**. Rivet opens automatically, resolves the video and audio streams, and merges them into an MP4 in `Downloads/Rivet`. The popup also has a **Download this video as MP4** button. Click the active job in Rivet to see progress and pause/resume controls.
+Enable media discovery for the site in the extension popup and approve its browser permission. On a public YouTube video, open **Download with Rivet**, then choose **Download video with audio · MP4**. Rivet opens automatically, resolves the video and audio streams, and merges them into an MP4 in `Downloads/Rivet`. The popup also has a **Download this video as MP4** button. Completed files use the video title, such as `Bubble Gum Riddim Mix.mp4`, and the listing stores the actual final path. A duplicate is saved as `Bubble Gum Riddim Mix (2).mp4`. Click the active job in Rivet to see progress and pause/resume controls.
 
 Release installers include pinned yt-dlp, QuickJS-NG, FFmpeg and FFprobe. No terminal setup is required. Media components update with Rivet’s verified application updates. Public, completed YouTube videos are supported; private, sign-in-only, live and DRM-protected content is not. Rivet does not import browser cookies. Other sites currently support direct HTTP/HTTPS media files; arbitrary HLS/DASH playlists are saved as playlist files only. Only download media you have permission to save.
 

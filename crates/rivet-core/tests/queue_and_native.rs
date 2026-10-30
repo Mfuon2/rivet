@@ -194,3 +194,28 @@ fn connection_probe_never_queues_or_creates_a_download_folder() {
         assert!(native::read_frame(&mut frame(invalid).as_slice()).is_err());
     }
 }
+
+#[test]
+fn browser_names_preserve_the_original_and_reserve_numbered_duplicates() {
+    let dir = TempDir::new().unwrap();
+    let queue = Queue::open(dir.path().join("queue.db")).unwrap();
+    let downloads = dir.path().join("downloads");
+    for _ in 0..2 {
+        native::serve(
+            &mut frame(br#"{"url":"https://example.com/My%20video.mp4"}"#).as_slice(),
+            &mut Vec::new(),
+            &queue,
+            &downloads,
+        )
+        .unwrap();
+    }
+    let jobs = queue.list().unwrap();
+    assert_eq!(
+        jobs[0].request.destination.file_name().unwrap(),
+        "My video.mp4"
+    );
+    assert_eq!(
+        jobs[1].request.destination.file_name().unwrap(),
+        "My video (2).mp4"
+    );
+}

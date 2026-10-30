@@ -246,6 +246,71 @@ impl Queue {
         ensure!(count == 1, "queue lease lost before completion");
         Ok(())
     }
+    /// Persist the final filename and terminal state together under the worker's lease.
+    pub fn finish_download(
+        &self,
+        id: &str,
+        owner: &str,
+        result: &crate::DownloadResult,
+    ) -> Result<()> {
+        let mut connection = self.connect()?;
+        let transaction =
+            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let encoded: String = transaction.query_row(
+            "SELECT request FROM jobs WHERE id=?1 AND owner=?2 AND status='running'",
+            params![id, owner],
+            |row| row.get(0),
+        )?;
+        let mut request: DownloadRequest = serde_json::from_str(&encoded)?;
+        request.destination = result.destination.clone();
+        request.validate()?;
+        transaction.execute("UPDATE jobs SET request=?3,status='complete',bytes=?4,total_bytes=?4,sha256=?5,error=NULL,owner=NULL,lease=0 WHERE id=?1 AND owner=?2",params![id,owner,serde_json::to_string(&request)?,i64::try_from(result.bytes)?,result.sha256])?;
+        transaction.commit()?;
+        Ok(())
+    }
+    pub fn rename_completed(&self, id: &str, name: &str) -> Result<()> {
+        ensure!(
+            crate::filenames::safe_name(name) == name && !name.starts_with('.'),
+            "Enter a valid filename without folders or reserved characters"
+        );
+        let mut connection = self.connect()?;
+        let transaction =
+            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let encoded: String = transaction.query_row(
+            "SELECT request FROM jobs WHERE id=?1 AND status='complete'",
+            [id],
+            |row| row.get(0),
+        )?;
+        let mut request: DownloadRequest = serde_json::from_str(&encoded)?;
+        let old = request.destination.clone();
+        ensure!(
+            std::fs::symlink_metadata(&old)?.is_file(),
+            "The downloaded file is missing or is no longer a regular file"
+        );
+        let target = old.parent().context("Missing download folder")?.join(name);
+        if old == target {
+            return Ok(());
+        }
+        std::fs::hard_link(&old, &target)
+            .context("A file with that name already exists, or the filename cannot be used")?;
+        request.destination = target.clone();
+        let result = (|| -> Result<()> {
+            transaction.execute(
+                "UPDATE jobs SET request=?2 WHERE id=?1",
+                params![id, serde_json::to_string(&request)?],
+            )?;
+            transaction.commit()?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            let _ = std::fs::remove_file(&target);
+            return Err(error);
+        }
+        // The new name and history are durable before releasing the old directory entry.
+        std::fs::remove_file(&old)
+            .context("The new name was saved, but the old file link could not be removed")?;
+        Ok(())
+    }
     pub fn retry(&self, id: &str) -> Result<()> {
         let count = self.connect()?.execute("UPDATE jobs SET status='queued',error=NULL,owner=NULL,lease=0 WHERE id=?1 AND (status IN ('paused','failed') OR (status='running' AND lease<?2))", params![id, now()])?;
         ensure!(

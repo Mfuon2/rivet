@@ -173,6 +173,11 @@ async fn live_media_pause_and_resume_preserves_a_complete_video() {
     .unwrap()
     .unwrap();
     assert!(result.bytes > 0);
+    assert_eq!(
+        queue.get(&id).unwrap().request.destination,
+        result.destination
+    );
+    assert_ne!(result.destination, destination);
     assert_eq!(queue.get(&id).unwrap().status, "complete");
     let probe = tokio::process::Command::new(media::tool("ffprobe").unwrap())
         .args([
@@ -183,7 +188,7 @@ async fn live_media_pause_and_resume_preserves_a_complete_video() {
             "-of",
             "json",
         ])
-        .arg(&destination)
+        .arg(&result.destination)
         .output()
         .await
         .unwrap();

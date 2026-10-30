@@ -10,6 +10,9 @@ import shutil
 import subprocess
 import tarfile
 import urllib.request
+import urllib.error
+import http.client
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,8 +24,19 @@ def fetch(spec, directory):
     path = directory / spec["sha256"]
     if not path.exists():
         temporary = path.with_suffix(".partial")
-        with urllib.request.urlopen(urllib.request.Request(spec["url"], headers={"User-Agent": "Rivet-release-builder"}), timeout=120) as source, temporary.open("wb") as target:
-            shutil.copyfileobj(source, target)
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(urllib.request.Request(spec["url"], headers={"User-Agent": "Rivet-release-builder"}), timeout=60) as source, temporary.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+                break
+            except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+                temporary.unlink(missing_ok=True)
+                if isinstance(error, urllib.error.HTTPError) and error.code not in {408, 429} and error.code < 500:
+                    raise
+                if attempt == 2:
+                    raise
+                print("Retrying a media dependency download after a temporary network error", flush=True)
+                time.sleep(2 ** attempt)
         temporary.replace(path)
     if hashlib.sha256(path.read_bytes()).hexdigest() != spec["sha256"]:
         raise ValueError("Media dependency checksum mismatch: " + spec["url"])

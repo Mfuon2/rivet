@@ -217,7 +217,7 @@ def linux_deb(stage, output, base, app_version, machine):
     control = package / "DEBIAN"
     control.mkdir()
     architecture = {"x86_64": "amd64", "aarch64": "arm64"}[machine]
-    (control / "control").write_text(f"Package: rivet\nVersion: {app_version}\nSection: net\nPriority: optional\nArchitecture: {architecture}\nMaintainer: Rivet contributors\nDepends: libc6, libgcc-s1, libstdc++6, libx11-6, libxkbcommon0, libwayland-client0, libegl1, libgl1\nDescription: Open source desktop download manager\n HTTP/HTTPS downloads, a durable queue and browser handoff.\n")
+    (control / "control").write_text(f"Package: rivet\nVersion: {app_version}\nSection: net\nPriority: optional\nArchitecture: {architecture}\nMaintainer: Rivet contributors\nDepends: libc6, libgcc-s1, libstdc++6, libx11-6, libxkbcommon0, libwayland-client0, libegl1, libgl1, xdg-utils\nDescription: Open source desktop download manager\n HTTP/HTTPS downloads, a durable queue and browser handoff.\n")
     run(["dpkg-deb", "--build", "--root-owner-group", package, output / f"{base}.deb"])
 
 

@@ -47,8 +47,8 @@ impl App {
                                 ("Resume selected", Action::Resume),
                                 ("Stop selected", Action::Stop),
                                 ("Stop all", Action::StopAll),
-                                ("Delete entries", Action::Delete),
-                                ("Delete completed", Action::DeleteCompleted),
+                                ("Remove entries", Action::Delete),
+                                ("Clear completed entries", Action::DeleteCompleted),
                             ],
                         ),
                         (
@@ -157,7 +157,7 @@ impl App {
                                     !self.active.is_empty(),
                                     Action::StopAll,
                                 ),
-                                ("Delete", Icon::Delete, deletable, Action::Delete),
+                                ("Remove", Icon::Delete, deletable, Action::Delete),
                                 (
                                     "Delete completed",
                                     Icon::Clear,
@@ -406,10 +406,101 @@ impl App {
             }
         } else {
             ui.strong("Download details");
-            ui.small("Select a row to inspect transfer status, destination and integrity. Double-click for properties.");
+            ui.small("Select a row to inspect transfer status, destination and integrity. Double-click completed files to open them; right-click for file actions.");
         }
     }
 
+    fn download_menu(&mut self, ui: &mut egui::Ui, job: &Job, action: &mut Option<Action>) {
+        let complete = job.status == "complete";
+        let exists = complete && job.request.destination.is_file();
+        let idle = !self.file_busy.contains(&job.id) && !self.active.contains_key(&job.id);
+        let reveal = if cfg!(target_os = "macos") {
+            "Show in Finder"
+        } else {
+            "Show in folder"
+        };
+        let choices = [
+            ("Open / Play", Action::OpenFile, exists && idle),
+            (reveal, Action::RevealFile, complete && idle),
+            ("Rename file…", Action::RenameFile, exists && idle),
+            ("Copy file path", Action::CopyPath, true),
+            ("Copy source URL", Action::CopySource, true),
+            (
+                "Download progress…",
+                Action::Progress,
+                self.transfer_progress.contains_key(&job.id),
+            ),
+            (
+                "Resume",
+                Action::Resume,
+                idle && matches!(job.status.as_str(), "queued" | "paused" | "failed"),
+            ),
+            ("Pause", Action::Stop, self.active.contains_key(&job.id)),
+            ("Properties…", Action::Properties, true),
+            (
+                "Schedule…",
+                Action::Scheduler,
+                idle && matches!(job.status.as_str(), "queued" | "paused" | "failed"),
+            ),
+            ("Remove from list", Action::Delete, idle),
+            ("Move file to Trash…", Action::TrashFile, exists && idle),
+        ];
+        for (index, (label, value, enabled)) in choices.into_iter().enumerate() {
+            if [3, 5, 10].contains(&index) {
+                ui.separator();
+            }
+            if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                // Every context action belongs to this exact row, even within a multi-selection.
+                self.selected = HashSet::from([job.id.clone()]);
+                *action = Some(value);
+                ui.close();
+            }
+        }
+        if complete && !exists {
+            ui.separator();
+            ui.weak("File moved or deleted outside Rivet.");
+        }
+        if !idle {
+            ui.weak("A file operation or transfer is in progress.");
+        }
+    }
+    pub(super) fn file_dialogs(&mut self, ctx: &egui::Context) {
+        if let Some((id, mut name)) = self.file_edit.take() {
+            let mut open = true;
+            let mut save = false;
+            egui::Window::new("Rename downloaded file").id(egui::Id::unique("rename-downloaded-file")).open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui| {
+                ui.label("Rename the file in its current download folder.");
+                ui.add(egui::TextEdit::singleline(&mut name).desired_width(420.).hint_text("Filename, including extension"));
+                let valid=rivet_core::filenames::safe_name(&name)==name && !name.starts_with('.');
+                if !valid {ui.colored_label(egui::Color32::from_rgb(194,76,69),"Enter a filename without folders or reserved characters.");}
+                ui.small("Keep its extension so your default application recognizes the file. Existing files are never replaced.");
+                save=ui.add_enabled(valid,egui::Button::new("Rename file")).clicked();
+            });
+            if save {
+                self.run_file_action(id, file_actions::Operation::Rename(name));
+            } else if open {
+                self.file_edit = Some((id, name));
+            }
+        }
+        if let Some(ids) = self.trash_confirm.take() {
+            let mut open = true;
+            let mut confirm = false;
+            let mut cancel = false;
+            egui::Window::new("Move downloaded file to Trash?").id(egui::Id::unique("trash-downloaded-file")).open(&mut open).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER,egui::Vec2::ZERO).show(ctx,|ui| {
+                ui.label("The downloaded file will move to your system Trash and its entry will leave this list.");
+                for id in &ids {if let Some(job)=self.jobs.iter().find(|job|&job.id==id){ui.strong(filename(job));ui.small(job.request.destination.display().to_string());}}
+                ui.small("To keep the file and only clear its history, use Remove from list instead.");
+                ui.horizontal(|ui| {cancel=ui.button("Cancel").clicked();confirm=ui.button("Move to Trash").clicked();});
+            });
+            if confirm {
+                for id in ids {
+                    self.run_file_action(id, file_actions::Operation::Trash);
+                }
+            } else if open && !cancel {
+                self.trash_confirm = Some(ids);
+            }
+        }
+    }
     fn table(&mut self, ui: &mut egui::Ui, action: &mut Option<Action>) {
         let ctx = ui.ctx().clone();
         let jobs = self.visible();
@@ -495,6 +586,8 @@ impl App {
                                             );
                                         name_clicked = response.clicked();
                                         name_double_clicked = response.double_clicked();
+                                        response
+                                            .context_menu(|ui| self.download_menu(ui, job, action));
                                     }
                                     Field::Queue => {
                                         ui.label(if job.status == "queued" { "Q" } else { "" });
@@ -583,6 +676,7 @@ impl App {
                                 let modifiers = ctx.input(|i| i.modifiers);
                                 self.select(index, &jobs, modifiers);
                                 if modifiers == egui::Modifiers::NONE
+                                    && job.status != "complete"
                                     && self.transfer_progress.contains_key(&job.id)
                                 {
                                     self.open_transfer(job.id.clone());
@@ -590,7 +684,9 @@ impl App {
                             }
                             if response.double_clicked() || name_double_clicked {
                                 self.selected = HashSet::from([job.id.clone()]);
-                                if self.transfer_progress.contains_key(&job.id) {
+                                if job.status == "complete" {
+                                    *action = Some(Action::OpenFile);
+                                } else if self.transfer_progress.contains_key(&job.id) {
                                     self.open_transfer(job.id.clone());
                                 } else {
                                     self.open_properties(job.id.clone());
@@ -599,21 +695,7 @@ impl App {
                             if response.secondary_clicked() && !self.selected.contains(&job.id) {
                                 self.selected = HashSet::from([job.id.clone()]);
                             }
-                            response.context_menu(|ui| {
-                                for (label, value) in [
-                                    ("Download progress…", Action::Progress),
-                                    ("Resume", Action::Resume),
-                                    ("Stop", Action::Stop),
-                                    ("Properties…", Action::Properties),
-                                    ("Schedule…", Action::Scheduler),
-                                    ("Delete entry", Action::Delete),
-                                ] {
-                                    if ui.button(label).clicked() {
-                                        *action = Some(value);
-                                        ui.close();
-                                    }
-                                }
-                            });
+                            response.context_menu(|ui| self.download_menu(ui, job, action));
                         });
                     });
                 if jobs.is_empty() {

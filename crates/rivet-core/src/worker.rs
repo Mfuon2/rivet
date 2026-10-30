@@ -43,7 +43,7 @@ pub async fn run_job(
         }
     };
     match &result {
-        Ok(done) => queue.finish(id, &owner, "complete", done.bytes, Some(&done.sha256), None)?,
+        Ok(done) => queue.finish_download(id, &owner, done)?,
         Err(error) => queue.finish(
             id,
             &owner,

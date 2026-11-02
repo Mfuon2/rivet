@@ -309,7 +309,11 @@ pub fn register(
     }
     Ok(path)
 }
-const ASSETS: [(&str, &[u8]); 18] = [
+const ASSETS: [(&str, &[u8]); 19] = [
+    (
+        "installer.js",
+        include_bytes!("../../../browser/shared/installer.js"),
+    ),
     (
         "user-font.css",
         include_bytes!("../../../browser/shared/user-font.css"),

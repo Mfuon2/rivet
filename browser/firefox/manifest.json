@@ -10,7 +10,9 @@
     "storage",
     "webRequest",
     "scripting",
-    "alarms"
+    "alarms",
+    "downloads",
+    "https://api.github.com/*"
   ],
   "optional_permissions": [
     "http://*/*",
@@ -18,6 +20,7 @@
   ],
   "background": {
     "scripts": [
+      "installer.js",
       "background.js"
     ]
   },

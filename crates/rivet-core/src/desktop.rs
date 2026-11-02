@@ -30,7 +30,7 @@ pub fn presence(database: &Path) -> Result<File> {
     }
     Ok(file)
 }
-fn running(database: &Path) -> Result<bool> {
+pub fn running(database: &Path) -> Result<bool> {
     let file = lock(database, "desktop.lock")?;
     Ok(file.try_lock_exclusive().is_err())
 }

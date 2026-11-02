@@ -239,7 +239,7 @@ def sign_from_environment(directory):
     shutil.copy2(release.PUBLIC_KEY, directory / "minisign.pub")
 
 
-def publish(repo, commit, value, directory):
+def publish(repo, commit, value, directory, preview=False):
     version_tuple(value)
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("Invalid source commit")
@@ -252,7 +252,8 @@ def publish(repo, commit, value, directory):
             raise ValueError("Release tag belongs to a different source revision")
         if not existing["isDraft"]:
             raise ValueError("Refusing to overwrite a published release")
-    notes = f"""Rivet {value} Preview
+    title = f"Rivet {value}" + (" Preview" if preview else "")
+    notes = f"""{title}
 
 Automatically built, tested and published from source commit `{commit}` after `main` was updated.
 
@@ -269,7 +270,7 @@ Packages are authenticated by Minisign-signed SHA-256 checksums. Obtain the trus
 
 ### Current limitations
 
-This is a preview. Windows Authenticode and Apple Developer ID/notarization are not configured; platform installation warnings can appear. Browser-store review/approval is separate, and developer loading is required until a production store identity is configured. Safari, authenticated capture, automatic takeover and HLS/DASH assembly are not implemented.
+Windows Authenticode and Apple Developer ID/notarization are not configured; platform installation warnings can appear. The public Chrome extension is updated separately through Google review; GitHub packages are available immediately. Safari, authenticated capture, automatic takeover and HLS/DASH assembly are not implemented.
 
 Build version `{value}` is stamped into the workspace and browser manifests by the workflow; the source branch does not need a manual version commit. See `release/README.md` for reproduction and pipeline details.
 """
@@ -277,15 +278,15 @@ Build version `{value}` is stamped into the workspace and browser manifests by t
         temporary.write(notes)
         temporary.flush()
         if listing.returncode != 0:
-            gh("release", "create", tag, "--repo", repo, "--draft", "--prerelease", "--target", commit, "--title", f"Rivet {value} Preview", "--notes-file", temporary.name)
+            gh("release", "create", tag, "--repo", repo, "--draft", f"--prerelease={str(preview).lower()}", "--target", commit, "--title", title, "--notes-file", temporary.name)
         else:
-            gh("release", "edit", tag, "--repo", repo, "--notes-file", temporary.name)
+            gh("release", "edit", tag, "--repo", repo, "--title", title, "--notes-file", temporary.name)
     files = release.artifacts(directory) + [directory / name for name in ("SHA256SUMS", "SHA256SUMS.minisig", "minisign.pub")]
     gh("release", "upload", tag, "--repo", repo, "--clobber", *files)
     with tempfile.TemporaryDirectory(prefix="rivet-upload-verify-") as temporary:
         gh("release", "download", tag, "--repo", repo, "--dir", temporary)
         release.verify(Path(temporary), release.PUBLIC_KEY)
-    gh("release", "edit", tag, "--repo", repo, "--draft=false", "--prerelease")
+    gh("release", "edit", tag, "--repo", repo, "--draft=false", f"--prerelease={str(preview).lower()}", f"--latest={str(not preview).lower()}")
     with tempfile.TemporaryDirectory(prefix="rivet-public-verify-") as temporary:
         gh("release", "download", tag, "--repo", repo, "--dir", temporary)
         release.verify(Path(temporary), release.PUBLIC_KEY)
@@ -305,7 +306,7 @@ def main():
     p = commands.add_parser("inspect"); p.add_argument("directory", type=Path); p.add_argument("--install", action="store_true")
     p = commands.add_parser("collect"); p.add_argument("source", type=Path); p.add_argument("output", type=Path); p.add_argument("--version", required=True)
     p = commands.add_parser("sign"); p.add_argument("directory", type=Path)
-    p = commands.add_parser("publish"); p.add_argument("directory", type=Path); p.add_argument("--repo", required=True); p.add_argument("--commit", required=True); p.add_argument("--version", required=True)
+    p = commands.add_parser("publish"); p.add_argument("directory", type=Path); p.add_argument("--repo", required=True); p.add_argument("--commit", required=True); p.add_argument("--version", required=True); p.add_argument("--preview", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "plan": plan(args.repo, args.commit)
@@ -313,7 +314,7 @@ def main():
         elif args.command == "inspect": inspect(args.directory, args.install)
         elif args.command == "collect": collect(args.source, args.output, args.version)
         elif args.command == "sign": sign_from_environment(args.directory)
-        elif args.command == "publish": publish(args.repo, args.commit, args.version, args.directory)
+        elif args.command == "publish": publish(args.repo, args.commit, args.version, args.directory, args.preview)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Publication failed: {error}\n")
 

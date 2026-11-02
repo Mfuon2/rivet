@@ -121,6 +121,59 @@ impl Queue {
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         Ok(conn)
     }
+    pub fn database_path(&self) -> &Path {
+        &self.path
+    }
+    /// Bounded summaries for IDs already known to this browser; no paths or source URLs.
+    pub fn browser_summaries(&self, ids: &[String]) -> Result<Vec<crate::native::BrowserJob>> {
+        ensure!(ids.len() <= 40, "Too many browser download IDs");
+        for id in ids {
+            uuid::Uuid::parse_str(id).context("Invalid browser download ID")?;
+        }
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?", ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let connection = self.connect()?;
+        let mut statement=connection.prepare(&format!("SELECT id,request,status,bytes,total_bytes,lease FROM jobs WHERE id IN ({placeholders}) ORDER BY created DESC,rowid DESC"))?;
+        let rows = statement.query_map(rusqlite::params_from_iter(ids.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
+        let mut jobs = Vec::new();
+        for row in rows {
+            let (id, request, status, bytes, total, lease) = row?;
+            let request: DownloadRequest = serde_json::from_str(&request)?;
+            let name = request
+                .destination
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .chars()
+                .take(180)
+                .collect();
+            jobs.push(crate::native::BrowserJob {
+                id,
+                name,
+                status: if status == "running" && lease < now() {
+                    "interrupted".into()
+                } else {
+                    status
+                },
+                bytes: bytes.max(0) as u64,
+                total: total.max(0) as u64,
+            });
+        }
+        Ok(jobs)
+    }
     pub fn enqueue(&self, request: DownloadRequest, not_before: i64) -> Result<String> {
         request.validate()?;
         let id = uuid::Uuid::new_v4().to_string();

@@ -1,5 +1,9 @@
 # Browser setup
 
+You can install the public Chrome extension before the desktop app. Its setup page detects supported OS/processor combinations, downloads the latest matching package when the native helper is confirmed missing on a fresh install, and waits for installation. Run the installer and open Rivet once; the page confirms the local connection automatically. Existing/broken helpers offer retry and repair. Downloads resume their displayed state across page refreshes; no installer executes silently. Linux defaults to the portable archive, with a DEB option.
+
+The popup displays local progress for downloads submitted by this browser profile, with no imported desktop history or cloud sync. It refreshes while open and tolerates older desktop helpers. Webpages cannot access the privileged setup/progress messages.
+
 Rivet detects the default HTTPS browser, checks known extension registrations without editing browser profiles, prepares its bundled extension files, and registers or repairs its native helper for the current user. Setup runs off the UI thread. Open **Browsers → Check and configure my default browser automatically** to repeat it, or choose another supported browser in the same dialog.
 
 ## Automatic setup

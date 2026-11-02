@@ -12,13 +12,13 @@ async function packages() {
   $("package").hidden=$("linux-label").hidden=!linux;
   $("platform-status").textContent=result.package ? `Latest release: Rivet ${result.package.version} · ${result.package.name}` : "No package is available for this platform. Choose the correct processor or use GitHub releases.";
   $("download").disabled=!result.package;
-  $("install-instructions").textContent=linux && packageKind()!=="deb" ? "Extract the downloaded portable archive, open its bin folder, then launch rivet-desktop. This page will connect automatically." : "Run the downloaded installer, approve operating-system prompts, then open Rivet once. This page will connect automatically.";
+  $("install-instructions").textContent=result.package?.kind===".dmg" ? "Open the downloaded DMG, drag Rivet into Applications, then open Rivet from Applications. This page will connect automatically." : linux && packageKind()!=="deb" ? "Extract the downloaded portable archive, open its bin folder, then launch rivet-desktop. This page will connect automatically." : "Run the downloaded installer, approve operating-system prompts, then open Rivet once. This page will connect automatically.";
   const download=result.download;
   if(download) {
     const running=download.state==="in_progress";
     $("download-progress").hidden=!running;
     $("download-progress").value=download.total>0?Math.min(1,download.bytes/download.total):0;
-    $("download-status").textContent=download.state==="complete" ? `${download.name} is downloaded. Run it and open Rivet.` : running ? `Downloading ${download.name}… ${download.total>0?Math.round(download.bytes/download.total*100)+"%":""}` : "The installer download was interrupted or removed. Choose Download to try again.";
+    $("download-status").textContent=download.state==="complete" ? download.kind===".dmg"?`${download.name} is downloaded. Open it, drag Rivet into Applications, then launch Rivet.`:`${download.name} is downloaded. Run it and open Rivet.` : running ? `Downloading ${download.name}… ${download.total>0?Math.round(download.bytes/download.total*100)+"%":""}` : "The installer download was interrupted or removed. Choose Download to try again.";
     if(download.danger && !["safe","accepted","allowlistedByPolicy"].includes(download.danger))$("download-status").textContent+=" Review any download warning in your browser. Rivet does not bypass browser safety checks.";
     $("show-installer").hidden=download.state!=="complete";
     $("download").textContent=download.state==="complete"?"Download again":"Download latest Rivet";

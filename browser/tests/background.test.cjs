@@ -184,7 +184,7 @@ test("explicit direct download starts a job; ordinary capture remains queue-only
 const Installer=require('../shared/installer.js');
 const setupSender={url:'chrome-extension://rivet/setup.html',tab:{id:19}};
 function release(value='0.1.8',target='macos-aarch64') {
- const name=`rivet-${value}-${target}${target.startsWith('macos')?'.pkg':target.startsWith('windows')?'-setup.exe':'.tar.gz'}`;
+ const name=`rivet-${value}-${target}${target.startsWith('macos')?'.dmg':target.startsWith('windows')?'-setup.exe':'.tar.gz'}`;
  return {tag_name:'v'+value,draft:false,prerelease:true,assets:[{name,size:100,browser_download_url:`https://github.com/Mfuon2/rivet/releases/download/v${value}/${name}`}]};
 }
 const fetchRelease=async()=>({ok:true,text:async()=>JSON.stringify([release()])});
@@ -203,7 +203,7 @@ test('fresh install downloads the matching latest installer once and resumes its
  const state=await f.message({type:'installer-status'},setupSender);assert.equal(state.automatic,true);assert.equal(state.detected,'macos-aarch64');
  const [one,two]=await Promise.all([f.message({type:'installer-download',automatic:true},setupSender),f.message({type:'installer-download',automatic:true},setupSender)]);
  assert.equal(one.ok,true);assert.equal(two.ok,true);assert.equal(f.installerDownloads.length,1);
- assert.equal(f.installerDownloads[0].filename,'rivet-0.1.8-macos-aarch64.pkg');
+ assert.equal(f.installerDownloads[0].filename,'rivet-0.1.8-macos-aarch64.dmg');
  assert.equal((await f.message({type:'installer-status'},setupSender)).download.state,'in_progress');
  f.downloaded.get(1).state='complete';
  assert.equal((await f.message({type:'installer-download'},setupSender)).ok,true);assert.equal(f.installerDownloads.length,1);
@@ -250,4 +250,11 @@ test('tracking storage failure does not turn a successful queue operation into a
  const f=fixture();f.api.runtime.sendNativeMessage=async()=>({ok:true,id:'30eae737-812a-4a4c-b749-912998407121'});
  f.api.storage.local.set=async()=>{throw Error('Disk full');};
  assert.equal((await f.message({type:'capture',url:'https://example.com/file.mp4'})).ok,true);
+});
+
+test('Mac setup prefers DMG and supports older PKG-only releases',()=>{
+ const current=release();assert.equal(Installer.asset(current,'macos-aarch64').kind,'.dmg');
+ const legacy=release();legacy.assets[0].name=legacy.assets[0].name.replace('.dmg','.pkg');legacy.assets[0].browser_download_url=legacy.assets[0].browser_download_url.replace('.dmg','.pkg');
+ assert.equal(Installer.asset(legacy,'macos-aarch64').kind,'.pkg');
+ current.assets.push(legacy.assets[0]);assert.equal(Installer.asset(current,'macos-aarch64').kind,'.dmg');
 });

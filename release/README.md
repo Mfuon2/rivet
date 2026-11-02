@@ -21,7 +21,7 @@ Main release runs are serialized. If main changes rapidly, GitHub concurrency ke
 Each platform runs Python packaging/signature tests, Rust formatting/lints/tests, browser tests, an optimized build and end-to-end checks against the actual release binaries. Native packaging produces:
 
 - Windows x64: an Inno Setup installer and ZIP. CI exercises silent installation, the installed CLI/helper, and uninstallation.
-- macOS: a PKG and app archive for the runner architecture; installer payload and icons are checked.
+- macOS: a DMG, PKG and app archive for the runner architecture; installer payload and icons are checked.
 - Linux x64: a DEB and tarball built on Ubuntu 24.04; the DEB is extracted and its CLI, launcher and icon checked.
 - Chromium and Firefox development ZIPs plus a separate Chrome Web Store upload ZIP.
 
@@ -89,3 +89,5 @@ When none of these values are present, the job clearly reports **Publisher setup
 A rerun recognizes an already published or already submitted version. It preserves any different version currently in review and stops with instructions to retry after that submission finishes. It does not cancel reviews or skip Google's checks. To retry only this step after configuring credentials or resolving a store issue, run Actions → **Chrome Web Store** → **Run workflow** on main, with the stable release tag; leave the tag blank to use GitHub Latest. Preview/draft releases are rejected. Firefox/Edge store submission is separate.
 
 New permissions in this update (`downloads` and the public GitHub API host) must be explained in the store Privacy tab; see [PUBLISHING.md](../docs/PUBLISHING.md). Chrome may request user approval for added permissions. Store approval and browser/OS installation consent remain under Google/user control.
+
+On macOS, download the `.dmg` for your processor, open it, drag **Rivet.app** onto **Applications**, then open Rivet from Applications and eject the image. The app prepares its browser helper on first launch. The DMG is inspected in CI by mounting it, copying the app off the image, verifying its code signature, and running its bundled tools. Apple Developer ID/notarization is still separate; changing to DMG does not remove Gatekeeper verification prompts.

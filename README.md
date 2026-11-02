@@ -40,7 +40,7 @@ Download the package matching your operating system and processor from [GitHub R
 | Platform | Packages |
 | --- | --- |
 | Windows | Setup EXE or ZIP archive |
-| macOS | PKG installer or application archive |
+| macOS | DMG drag-to-Applications installer, PKG installer or application archive |
 | Linux | DEB package or tarball |
 
 **Project status:** some features and platform integrations are still in development. Linux packages are built on Ubuntu 24.04. Windows installers do not have Authenticode publisher signatures; macOS packages are not Developer ID-signed or notarized, so platform warnings may appear.
@@ -118,7 +118,7 @@ python3 scripts/prepare_media_tools.py
 python3 scripts/release.py package --installer
 ```
 
-Media packaging requires GNU Make and a C toolchain (MSYS2 Make plus Visual Studio C++ on Windows); the preparation script downloads checksum-pinned components and builds FFmpeg from source. For debug media downloads, set `RIVET_MEDIA_TOOLS` to the absolute path of `target/media-tools`. Installer packaging requires Inno Setup 6 on Windows, `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
+Media packaging requires GNU Make and a C toolchain (MSYS2 Make plus Visual Studio C++ on Windows); the preparation script downloads checksum-pinned components and builds FFmpeg from source. For debug media downloads, set `RIVET_MEDIA_TOOLS` to the absolute path of `target/media-tools`. Installer packaging requires Inno Setup 6 on Windows, `hdiutil` and `pkgbuild` on macOS, or `dpkg-deb` on Debian/Ubuntu. See the [release guide](release/README.md) for maintainer packaging and signing instructions.
 
 ## Command-line usage
 
@@ -174,3 +174,5 @@ Read the [privacy statement](PRIVACY.md) and [security design](SECURITY.md). Bro
 Rivet is licensed under the [MIT License](LICENSE). Action and file icons use [Lucide](https://lucide.dev/) with the included [Lucide/Feather notices](crates/rivet-desktop/assets/lucide/LICENSE). The default font is Segoe UI when installed or supplied locally. Poppins is bundled as a fallback under the [SIL Open Font License](assets/fonts/OFL.txt). Microsoft font files are not included in source or releases. The product logo is included in [assets/branding](assets/branding/).
 
 Bundled media tools retain their own licenses: yt-dlp standalone distribution (GPL-3.0-or-later), FFmpeg (LGPL-2.1-or-later configuration), and QuickJS-NG (MIT). Sources, build configuration and notices accompany the media programs in each application package.
+
+On macOS, download the `.dmg` for your processor, open it, drag **Rivet.app** onto **Applications**, then open Rivet from Applications and eject the image. The app prepares its browser helper on first launch. The DMG is inspected in CI by mounting it, copying the app off the image, verifying its code signature, and running its bundled tools. Apple Developer ID/notarization is still separate; changing to DMG does not remove Gatekeeper verification prompts.

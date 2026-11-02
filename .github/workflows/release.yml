@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      preview:
+        description: Publish a preview instead of a stable Latest release
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -137,4 +142,16 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_COMMIT: ${{ github.sha }}
           RELEASE_VERSION: ${{ needs.plan.outputs.version }}
-        run: python scripts/publish.py publish dist/publish --repo "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT" --version "$RELEASE_VERSION"
+          RELEASE_PREVIEW: ${{ inputs.preview || false }}
+        run: |
+          args=()
+          if [ "$RELEASE_PREVIEW" = "true" ]; then args+=(--preview); fi
+          python scripts/publish.py publish dist/publish --repo "$RELEASE_REPOSITORY" --commit "$RELEASE_COMMIT" --version "$RELEASE_VERSION" "${args[@]}"
+  chrome-store:
+    name: Update Chrome Web Store
+    needs: [plan, publish]
+    if: always() && needs.plan.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') && !inputs.preview
+    uses: ./.github/workflows/chrome-store.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+    secrets: inherit

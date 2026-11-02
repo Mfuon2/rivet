@@ -6,3 +6,4 @@ body{width:380px;margin:0}header,main,footer{padding:16px}header{border-bottom:1
 header{display:flex;align-items:center;gap:12px}.brand-logo{flex:none;object-fit:contain}
 
 button,input,select,textarea{font-family:inherit}
+#desktop-jobs{max-height:220px;overflow:auto}#desktop-jobs progress{display:block;width:100%;margin-top:6px;accent-color:var(--accent)}

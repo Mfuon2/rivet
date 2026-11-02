@@ -4,7 +4,8 @@ Merging into `main` triggers [Release and publish](../.github/workflows/release.
 
 ```text
 main update → allocate version → test/build Windows + macOS + Linux
-            → inspect packages → sign checksums → publish → verify downloads
+            → inspect packages → sign checksums → publish Latest → verify downloads
+            → authenticate store ZIP → upload → Google review → Chrome update
 ```
 
 ## Automatic versions
@@ -38,7 +39,9 @@ After signing `SHA256SUMS`, the job verifies the signature against the committed
 
 Installable files are published as **GitHub Release assets**. The GitHub Packages tab is a separate package/container registry and is not required for these downloads. The workflow also records the release URL in the Actions summary and `release` deployment environment.
 
-Releases remain marked as previews while the project is under development. Minisign authentication is not Windows Authenticode or Apple Developer ID/notarization. Browser-store upload/review is separate; the pipeline produces the upload ZIP but does not claim store approval or bypass browser consent.
+Normal main releases are published as stable GitHub releases and explicitly marked **Latest**. To create a preview, run **Release and publish** manually on main and enable **preview**. Previews use the Preview title, remain prereleases, are not Latest, and are not submitted to Chrome. The source tag itself (for example `v0.1.8`) does not determine these GitHub flags.
+
+Minisign authentication is separate from Windows Authenticode or Apple Developer ID/notarization; the Latest label does not remove platform warnings.
 
 ## Manual operation and recovery
 
@@ -63,4 +66,26 @@ Local packaging requires Inno Setup 6 on Windows, Apple's `pkgbuild` on macOS or
 
 ## Other publishing services
 
-Apple notarization, Windows publisher certificates/SignPath and browser-store publication require their separate enrollment or approval processes. Their credentials are not configured in this pipeline. Installer inspection is automated, but comprehensive clean-machine desktop/browser interaction coverage and independent security review remain separate work.
+Apple notarization, Windows publisher certificates/SignPath and browser-store publication require their separate enrollment or approval processes. Their separate credentials and approvals are required. Installer inspection is automated, but comprehensive clean-machine desktop/browser interaction coverage and independent security review remain separate work.
+
+
+## Automatic Chrome updates after a release
+
+The release workflow calls [Chrome Web Store](../.github/workflows/chrome-store.yml) after publication and public download verification. That job downloads the published release, verifies its Minisign signature against the committed key and all package hashes, validates the Chrome ZIP version/manifest, uploads it to the existing public item `oloipikeghldaokdiglloelbpfheeeik`, then submits it for review with `DEFAULT_PUBLISH`. Google deploys it after approval; Chrome distributes the approved extension update to installed users. There is no ZIP download or developer loading required for store-installed extensions.
+
+Configure this **once** in GitHub Settings → Environments → **release**:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| Variable | `CWS_PUBLISHER_ID` | Publisher ID from the Chrome Developer Dashboard account settings (not the extension ID). |
+| Secret | `CWS_CLIENT_ID` | Google OAuth client ID authorized for the publisher account. |
+| Secret | `CWS_CLIENT_SECRET` | Its OAuth client secret. |
+| Secret | `CWS_REFRESH_TOKEN` | Refresh token with `https://www.googleapis.com/auth/chromewebstore` scope. |
+
+Enable the Chrome Web Store API in the Google Cloud project and authorize the OAuth client as the account that can manage Rivet. Follow Google's [API authentication instructions](https://developer.chrome.com/docs/webstore/using-api). Keep these values in GitHub secrets, never in source or chat. This uses the existing Chrome publisher account; GitHub authentication does not grant access to Google publishing.
+
+When none of these values are present, the job clearly reports **Publisher setup required** and skips store submission. GitHub releases remain available. Partial configuration, API rejection or invalid signatures fail the store job without hiding the problem or changing the published desktop assets.
+
+A rerun recognizes an already published or already submitted version. It preserves any different version currently in review and stops with instructions to retry after that submission finishes. It does not cancel reviews or skip Google's checks. To retry only this step after configuring credentials or resolving a store issue, run Actions → **Chrome Web Store** → **Run workflow** on main, with the stable release tag; leave the tag blank to use GitHub Latest. Preview/draft releases are rejected. Firefox/Edge store submission is separate.
+
+New permissions in this update (`downloads` and the public GitHub API host) must be explained in the store Privacy tab; see [PUBLISHING.md](../docs/PUBLISHING.md). Chrome may request user approval for added permissions. Store approval and browser/OS installation consent remain under Google/user control.

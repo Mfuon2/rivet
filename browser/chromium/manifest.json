@@ -10,7 +10,8 @@
     "storage",
     "webRequest",
     "scripting",
-    "alarms"
+    "alarms",
+    "downloads"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -48,5 +49,8 @@
         "https://*/*"
       ]
     }
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
   ]
 }

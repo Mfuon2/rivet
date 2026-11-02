@@ -1,0 +1,58 @@
+name: Chrome Web Store
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag (leave empty for Latest)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: rivet-chrome-store
+  cancel-in-progress: false
+jobs:
+  submit:
+    name: Verify package and submit for Chrome review
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Check one-time publisher setup
+        id: config
+        env:
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: python scripts/chrome_store.py config
+      - name: Install signature verifier
+        if: steps.config.outputs.configured == 'true'
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Authenticate the published stable release
+        if: steps.config.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STORE_TAG: ${{ inputs.tag }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: python scripts/chrome_store.py download dist/store-release --repo "$RELEASE_REPOSITORY" --tag "$STORE_TAG"
+      - name: Upload and request automatic publication after Google review
+        if: steps.config.outputs.configured == 'true'
+        env:
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: python scripts/chrome_store.py submit dist/store-release

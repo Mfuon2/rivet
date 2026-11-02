@@ -1,6 +1,6 @@
 # Publishing Rivet with a verifiable publisher identity
 
-Status: development builds only. No browser-store submission, OS publisher signing, notarization or publisher-account configuration has been performed. A public Minisign verification key is available in release/minisign.pub; preview GitHub releases use signed checksums. Local tests do not constitute an independent security audit. Native packaging templates and a free signed-checksum workflow are now available. Complete installed-browser/platform installation tests and select a production signing identity before a public stable release.
+Status: Rivet has a [public Chrome listing](https://chromewebstore.google.com/detail/rivet-download-manager/oloipikeghldaokdiglloelbpfheeeik) and GitHub releases authenticated with Minisign checksums. Stable releases are marked Latest. After one-time publisher OAuth setup, the pipeline uploads the verified Chrome ZIP to the existing item and submits it for automatic publication after Google review; see [release/README.md](../release/README.md#automatic-chrome-updates-after-a-release). Platform publisher signing and Apple notarization remain separate.
 
 ## 1. Establish your publisher identity
 
@@ -50,7 +50,7 @@ Build from an identified source tag on each supported OS/architecture, using the
 
 Sign completed artifacts, then generate checksums of the final signed files. Publish those files, signed checksums and release notes from the official HTTPS download page/repository release. A hash alone detects changed bytes only when the expected hash is trusted; it does not establish publisher identity. A signature establishes identity/integrity within its trust model, not that the program is free of bugs or malicious behavior.
 
-Before implementing automatic desktop updates, define a signed update manifest, pin the verification public key in the app, verify packages before installation, and handle version rollback/key rotation. The current code has no production updater.
+The desktop updater checks GitHub at startup, verifies the signed checksum manifest with its pinned public key, downloads and verifies the matching newer package, and installs it after the user confirms. Queue/settings are preserved. Release key rotation requires a deliberate trusted transition; the Latest label alone is not accepted as proof of authenticity.
 
 ## Immediate prerequisites
 
@@ -60,3 +60,14 @@ Before implementing automatic desktop updates, define a signed update manifest, 
 - Clean-machine installation/upgrade/removal validation for the provided installer templates.
 
 Enter credentials only into the official service or your secret manager; they are not needed in chat. Account enrollment, identity verification, store review and signing cannot be replaced by repository configuration alone.
+
+## Extension-first setup permissions and reviewer flow
+
+- `downloads`: download, track and reveal only the matching Rivet desktop installer from the official GitHub release. It does not take over browser downloads or search unrelated history.
+- `https://api.github.com/*`: fetch public Rivet release metadata to choose the latest supported desktop package. Requests omit credentials; responses are parsed as metadata, never executable code.
+- `nativeMessaging`: connect to the installed helper, hand off explicitly chosen links, open the desktop on request, and read bounded progress for IDs returned to this profile.
+- `storage`: retain local site preferences, at most 40 submitted IDs, and installer state so page reloads do not start duplicate downloads. There is no account or cloud history sync.
+
+Reviewer flow: install the extension without the desktop helper; setup should detect the platform and begin the matching official package download. Run the installer and open Rivet; the still-open page should report Connected automatically. Send a direct download link and watch its queued/running/completed status in the popup. Verify that disabling site access removes widgets, and that unrelated desktop jobs are absent from browser sync. If an older helper is installed, link handoff remains available with a hint to update for live status. The installer is never run automatically, and browser/OS safety prompts are not bypassed.
+
+The updated store package requests additional permissions and must complete the store's publisher upload/review flow. The release workflow submits stable packages only when publisher credentials are configured. Its summary reports missing setup, submission state or failure; successful GitHub publication alone does not mean Google has approved the extension.

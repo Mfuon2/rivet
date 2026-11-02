@@ -70,6 +70,18 @@ class PublishTests(unittest.TestCase):
             (duplicate / "rivet-0.1.1-extension-chromium.zip").write_bytes(b"different bytes")
             with self.assertRaises(ValueError): publish.collect(root / "input", root / "conflict", "0.1.1")
 
+    def test_stable_releases_are_latest_and_preview_is_explicit(self):
+        for preview in (False, True):
+            with tempfile.TemporaryDirectory() as temporary, patch.object(publish.release, "verify"), patch.object(publish.release, "artifacts", return_value=[]), patch.object(publish, "gh") as gh, patch.object(publish.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "")), contextlib.redirect_stdout(io.StringIO()):
+                publish.publish("Mfuon2/rivet", "a" * 40, "0.1.8", Path(temporary), preview=preview)
+                calls = [call.args for call in gh.call_args_list]
+                create = next(call for call in calls if call[:2] == ("release", "create"))
+                edit = next(call for call in calls if call[:2] == ("release", "edit"))
+                self.assertIn("--prerelease=" + str(preview).lower(), create)
+                self.assertIn("--prerelease=" + str(preview).lower(), edit)
+                self.assertIn("--latest=" + str(not preview).lower(), edit)
+                self.assertIn("Rivet 0.1.8" + (" Preview" if preview else ""), create)
+
     def test_signing_requires_configured_environment_secrets(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError): publish.sign_from_environment(Path("unused"))

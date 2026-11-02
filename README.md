@@ -9,6 +9,8 @@ Rivet helps you organize HTTP/HTTPS downloads, use multiple connections, pause a
 [![Release and publish](https://github.com/Mfuon2/rivet/actions/workflows/release.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/release.yml)
 [![Rust, browser, packaging and smoke tests](https://github.com/Mfuon2/rivet/actions/workflows/ci.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/ci.yml)
 
+[![Chrome Web Store submission](https://github.com/Mfuon2/rivet/actions/workflows/chrome-store.yml/badge.svg)](https://github.com/Mfuon2/rivet/actions/workflows/chrome-store.yml)
+
 [Downloads](https://github.com/Mfuon2/rivet/releases) · [Browser setup](docs/BROWSER.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md)
 
 ![Desktop preview](docs/desktop-preview.png)
@@ -41,7 +43,7 @@ Download the package matching your operating system and processor from [GitHub R
 | macOS | PKG installer or application archive |
 | Linux | DEB package or tarball |
 
-**Preview release:** some features and platform integrations are still in development. Linux packages are built on Ubuntu 24.04. Windows installers do not have Authenticode publisher signatures; macOS packages are not Developer ID-signed or notarized, so platform warnings may appear.
+**Project status:** some features and platform integrations are still in development. Linux packages are built on Ubuntu 24.04. Windows installers do not have Authenticode publisher signatures; macOS packages are not Developer ID-signed or notarized, so platform warnings may appear.
 
 Release checksums are signed with Minisign. Follow the [verification instructions](release/VERIFYING.md) before installing. The public verification key is in [release/minisign.pub](release/minisign.pub).
 
@@ -65,6 +67,17 @@ Offline checks never block app startup. Update requests contact GitHub and its r
 4. Select the entry and choose **Resume**, or choose **Start queue** to process queued downloads.
 
 Automatic queue processing is off at startup. An explicit **Download** action in the widget or popup opens Rivet and starts that selected download automatically. **Stop** pauses selected active transfers; **Stop all** stops queue processing and pauses active transfers. Completed destination files are never overwritten.
+
+## Install the extension first
+
+1. Add [Rivet from the Chrome Web Store](https://chromewebstore.google.com/detail/rivet-download-manager/oloipikeghldaokdiglloelbpfheeeik).
+2. Its setup page checks the native connection. On a fresh installation with a missing helper, it detects the OS/processor and downloads the matching latest published desktop package automatically. Published previews are included. It never chooses a different processor silently; unsupported devices show the releases link and a platform selector.
+3. Run the downloaded installer and open Rivet once. Linux defaults to a portable archive; Debian/Ubuntu users can select DEB. Browser warnings and operating-system installation prompts remain under your control.
+4. Keep the setup tab open. It retries while installation finishes, then switches to Connected automatically. A connected desktop suppresses installer downloads; a broken connection offers retry/repair instead of assuming the app is absent.
+
+Installer downloads are tracked across setup-page refreshes, with progress and a Show downloaded installer button. Browser defaults determine the download folder. Only official Rivet release addresses are accepted. No installer is executed silently; independent Minisign verification instructions remain available from setup.
+
+The extension popup syncs connection/version and queue progress for the last 40 download IDs sent by this browser profile. It exposes filenames and transfer counters, without source URLs or local paths in the sync response. Completed names and removed entries update automatically. Other desktop history is not imported. This is local native messaging, with no account or cloud history sync. Old helpers remain usable for link handoff and show a live-status update hint.
 
 ## Browser integration
 
@@ -137,7 +150,7 @@ See [capabilities](docs/CAPABILITIES.md) and the [roadmap](docs/ROADMAP.md) for 
 
 ## Automatic releases
 
-Updates merged into `main` automatically run the checks, build Windows/macOS/Linux packages, sign release checksums, publish a versioned GitHub release, and verify the uploaded downloads. Each release includes native installers, archives and browser ZIPs. See the [release guide](release/README.md) for versioning and recovery details.
+Updates merged into `main` automatically run the checks, build Windows/macOS/Linux packages, sign release checksums, publish a versioned GitHub release, and verify the uploaded downloads. Normal releases are marked **Latest**; previews are an explicit workflow option. Each release includes native installers, archives and browser ZIPs. Once the publisher OAuth secrets are configured, the verified stable release also uploads its Chrome package and requests automatic publication after Google review. See the [release guide](release/README.md) for versioning and recovery details.
 
 ## Development
 

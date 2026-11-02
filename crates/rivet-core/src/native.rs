@@ -36,12 +36,31 @@ pub struct CaptureReply {
     pub error: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct BrowserJob {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub bytes: u64,
+    pub total: u64,
+}
+#[derive(Serialize)]
+struct SyncReply {
+    ok: bool,
+    protocol: u8,
+    desktop_version: &'static str,
+    desktop_running: bool,
+    jobs: Vec<BrowserJob>,
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Control {
     Ping {},
     Media { url: String },
     Download { url: String },
+    Sync { ids: Vec<String> },
+    Open {},
 }
 
 #[derive(Deserialize)]
@@ -73,7 +92,11 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Option<NativeMessage>> {
 }
 
 pub fn write_frame(writer: &mut impl Write, reply: &CaptureReply) -> Result<()> {
+    write_message(writer, reply)
+}
+fn write_message(writer: &mut impl Write, reply: &impl Serialize) -> Result<()> {
     let data = serde_json::to_vec(reply)?;
+    ensure!(data.len() <= MAX_MESSAGE, "Native reply exceeds bounds");
     writer.write_all(&(data.len() as u32).to_le_bytes())?;
     writer.write_all(&data)?;
     writer.flush()?;
@@ -109,6 +132,54 @@ pub fn serve_with_actions(
     while let Some(message) = read_frame(reader)? {
         let mut automatic = false;
         let capture = match message {
+            NativeMessage::Control(Control::Sync { ids }) => {
+                match queue.browser_summaries(&ids) {
+                    Ok(jobs) => {
+                        write_message(
+                            writer,
+                            &SyncReply {
+                                ok: true,
+                                protocol: 1,
+                                desktop_version: env!("CARGO_PKG_VERSION"),
+                                desktop_running: crate::desktop::running(queue.database_path())
+                                    .unwrap_or(false),
+                                jobs,
+                            },
+                        )?;
+                        connected();
+                    }
+                    Err(_) => write_frame(
+                        writer,
+                        &CaptureReply {
+                            ok: false,
+                            id: None,
+                            error: Some("Could not read bounded browser download status".into()),
+                        },
+                    )?,
+                }
+                continue;
+            }
+            NativeMessage::Control(Control::Open {}) => {
+                let result = start_media();
+                let ok = result.is_ok();
+                write_frame(
+                    writer,
+                    &CaptureReply {
+                        ok,
+                        id: None,
+                        error: if ok {
+                            None
+                        } else {
+                            Some("Could not open Rivet; open it from your applications menu".into())
+                        },
+                    },
+                )?;
+                if ok {
+                    connected();
+                }
+                continue;
+            }
+
             NativeMessage::Control(Control::Download { url }) => {
                 automatic = true;
                 Capture { url }

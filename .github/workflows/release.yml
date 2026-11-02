@@ -150,7 +150,7 @@ jobs:
   chrome-store:
     name: Update Chrome Web Store
     needs: [plan, publish]
-    if: always() && needs.plan.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') && !inputs.preview
+    if: always() && needs.plan.result == 'success' && (needs.publish.result == 'success' || needs.plan.outputs.already == 'true') && !inputs.preview
     uses: ./.github/workflows/chrome-store.yml
     with:
       tag: ${{ needs.plan.outputs.tag }}

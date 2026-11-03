@@ -186,6 +186,8 @@ def inspect(directory, install=False):
                     raise ValueError("Linux launcher missing")
                 if not (destination / "usr/share/icons/hicolor/256x256/apps/org.rivet.downloads.png").is_file():
                     raise ValueError("Linux application icon missing")
+            elif path.suffix == ".dmg":
+                inspect_dmg(path, folder / "dmg-mount", release.version())
             elif path.suffix == ".pkg":
                 listing = subprocess.check_output(["pkgutil", "--payload-files", path], text=True)
                 for name in ("rivet-desktop", "rivet-native-host", "rivet"):
@@ -197,6 +199,31 @@ def inspect(directory, install=False):
                 if "Rivet.app/Contents/Resources/Rivet.icns" not in listing:
                     raise ValueError("macOS application icon missing")
     print("Native package and browser payload checks passed")
+
+
+def inspect_dmg(path, mount, value):
+    release.run(["hdiutil", "verify", path])
+    mount.mkdir()
+    release.run(["hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", mount, path])
+    try:
+        app = mount / "Rivet.app"
+        info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+        if info["CFBundleShortVersionString"] != value:
+            raise ValueError("DMG application version mismatch")
+        if not (mount / "Applications").is_symlink() or os.readlink(mount / "Applications") != "/Applications":
+            raise ValueError("DMG Applications shortcut missing")
+        release.run(["codesign", "--verify", "--deep", "--strict", app])
+        # Exercise a copy installed off the read-only volume, including executable permissions.
+        with tempfile.TemporaryDirectory(prefix="rivet-dmg-install-") as temporary:
+            installed = Path(temporary) / "Applications/Rivet.app"
+            installed.parent.mkdir()
+            release.run(["ditto", app, installed])
+            release.run(["codesign", "--verify", "--deep", "--strict", installed])
+            release.run([installed / "Contents/MacOS/rivet", "--version"], timeout=20)
+            for tool, args in [("yt-dlp", ["--ignore-config", "--version"]), ("ffmpeg", ["-version"]), ("ffprobe", ["-version"]), ("qjs", ["-e", 'print("RIVET_JS_OK")'])]:
+                release.run([installed / "Contents/MacOS/media" / tool, *args], timeout=30)
+    finally:
+        release.run(["hdiutil", "detach", mount])
 
 
 def collect(source, output, value):
@@ -220,8 +247,8 @@ def collect(source, output, value):
     if not required.issubset(names):
         raise ValueError("Missing required artifacts: " + ", ".join(sorted(required - names)))
     mac = [name for name in names if re.fullmatch(rf"rivet-{re.escape(value)}-macos-(?:aarch64|x86_64)\.pkg", name)]
-    if not mac or any(name.removesuffix(".pkg") + ".zip" not in names for name in mac):
-        raise ValueError("macOS installer/archive pair missing")
+    if not mac or any(any(name.removesuffix(".pkg") + suffix not in names for suffix in (".zip", ".dmg")) for name in mac):
+        raise ValueError("macOS DMG/installer/archive set missing")
     release.checksums(output)
     print("Collected complete Windows/macOS/Linux release:", len(names), "packages")
 
@@ -260,7 +287,7 @@ Automatically built, tested and published from source commit `{commit}` after `m
 ### Downloads
 
 - Windows x64: setup EXE and ZIP.
-- macOS: PKG installer and app ZIP for the architecture in the filename.
+- macOS: drag-to-Applications DMG, PKG installer and app ZIP for the architecture in the filename.
 - Linux x64: DEB and tarball, built on Ubuntu 24.04.
 - Browser extensions: Chromium/Firefox development ZIPs and a separate Chrome Web Store upload ZIP.
 

@@ -56,12 +56,18 @@ class PublishTests(unittest.TestCase):
             root = Path(temporary)
             source = root / "input/platform"
             source.mkdir(parents=True)
-            names = ["windows-x86_64-setup.exe", "windows-x86_64.zip", "linux-x86_64.deb", "linux-x86_64.tar.gz", "macos-aarch64.pkg", "macos-aarch64.zip", "extension-chromium.zip", "extension-firefox.zip", "chrome-store.zip"]
+            names = ["windows-x86_64-setup.exe", "windows-x86_64.zip", "linux-x86_64.deb", "linux-x86_64.tar.gz", "macos-aarch64.pkg", "macos-aarch64.dmg", "macos-aarch64.zip", "extension-chromium.zip", "extension-firefox.zip", "chrome-store.zip"]
             for name in names:
                 (source / ("rivet-0.1.1-" + name)).write_bytes(b"test artifact")
             release.checksums(source)
             publish.collect(root / "input", root / "complete", "0.1.1")
-            self.assertEqual(release.verify_hashes(root / "complete"), 9)
+            self.assertEqual(release.verify_hashes(root / "complete"), 10)
+            dmg = source / "rivet-0.1.1-macos-aarch64.dmg"
+            dmg.unlink()
+            release.checksums(source)
+            with self.assertRaisesRegex(ValueError, "DMG"):
+                publish.collect(root / "input", root / "no-dmg", "0.1.1")
+            dmg.write_bytes(b"test artifact")
             (source / "rivet-0.1.1-windows-x86_64-setup.exe").unlink()
             release.checksums(source)
             with self.assertRaises(ValueError): publish.collect(root / "input", root / "missing", "0.1.1")

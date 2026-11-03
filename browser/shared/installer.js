@@ -22,7 +22,7 @@
   function asset(release, target, kind) {
     if (!/^(macos|windows|linux)-(aarch64|x86_64)$/.test(target || "") || !version(release?.tag_name)) return null;
     const value=release.tag_name.slice(1);
-    const extension=target.startsWith("macos-") ? ".pkg" : target.startsWith("windows-") ? "-setup.exe" : kind==="deb" ? ".deb" : ".tar.gz";
+    const extension=target.startsWith("macos-") ? ((release.assets||[]).some(a=>a.name===`rivet-${value}-${target}.dmg`)?".dmg":".pkg") : target.startsWith("windows-") ? "-setup.exe" : kind==="deb" ? ".deb" : ".tar.gz";
     const name=`rivet-${value}-${target}${extension}`;
     const matches=(release.assets || []).filter(a => a.name===name);
     if(matches.length!==1)return null;

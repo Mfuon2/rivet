@@ -23,7 +23,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_KEY = ROOT / "release/minisign.pub"
 CHECKSUMS = "SHA256SUMS"
-ARTIFACT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:zip|tar\.gz|pkg|exe|deb)\Z")
+ARTIFACT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.(?:zip|tar\.gz|pkg|dmg|exe|deb)\Z")
 
 
 def run(args, **kwargs):
@@ -199,6 +199,23 @@ def mac_bundle(stage, binaries, app_version):
     return app
 
 
+def mac_dmg(app, destination):
+    """A read-only disk image with a signed app and an Applications shortcut."""
+    with tempfile.TemporaryDirectory(prefix="rivet-dmg-") as temporary:
+        contents = Path(temporary) / "contents"
+        contents.mkdir()
+        run(["ditto", app, contents / "Rivet.app"])
+        (contents / "Applications").symlink_to("/Applications", target_is_directory=True)
+        (contents / "Install Rivet.txt").write_text(
+            "Install Rivet\n\n1. Drag Rivet.app onto Applications.\n"
+            "2. Open Rivet from Applications.\n3. Eject this disk image.\n\n"
+            "Rivet prepares the browser helper on first launch. Your existing queue is kept.\n",
+            encoding="utf-8")
+        run(["hdiutil", "create", "-ov", "-volname", "Rivet", "-srcfolder", contents,
+             "-format", "UDZO", "-fs", "HFS+", destination])
+        run(["hdiutil", "verify", destination])
+
+
 def linux_deb(stage, output, base, app_version, machine):
     package = stage / "deb-root"
     app_dir = package / "opt/rivet"
@@ -260,6 +277,7 @@ def package(output, installer=False):
             shutil.copytree(app, bundle / "Rivet.app")
             zip_tree(bundle, output / f"{base}.zip")
             if installer:
+                mac_dmg(app, output / f"{base}.dmg")
                 run(["pkgbuild", "--component", app, "--install-location", "/Applications", "--identifier", "org.rivet.downloads", "--version", app_version, output / f"{base}.pkg"])
         else:
             bindir = bundle / "bin"
